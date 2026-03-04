@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# uv / venv
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# 输出数据（不入库，数据量大且时效性强）
+output/
+
+# 调试文件
+debug_*.html
+debug_*.png
+
+# 系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 环境变量（如有敏感 cookie 文件）
+*.env
+.env*
+cookies.txt
