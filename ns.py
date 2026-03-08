@@ -17,6 +17,10 @@ ns.py — NodeSeek 数据工具 CLI 入口
   uv run ns.py post 637248              # 帖子详情
   uv run ns.py post 637248 637250       # 多个帖子
   uv run ns.py post 637248 --no-comments
+
+  uv run ns.py search claude            # 关键词搜索
+  uv run ns.py search vps --category trade --limit 30
+  uv run ns.py search claude --format md
 """
 import argparse
 import asyncio
@@ -110,6 +114,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="输出目录 (默认: output/posts/)",
     )
 
+    # ── search ───────────────────────────────────────────────
+    search = subparsers.add_parser("search", help="关键词搜索帖子（调用聚合 API）")
+    search.add_argument("keyword", nargs="?", default=None, help="搜索关键词")
+    search.add_argument(
+        "--category", "-c",
+        default=None,
+        help="分类过滤，如 trade / tech / daily / info / review",
+    )
+    search.add_argument(
+        "--author", "-a",
+        default=None,
+        help="按作者过滤",
+    )
+    search.add_argument(
+        "--limit", "-n",
+        type=int, default=20,
+        help="返回条数 (1-100, 默认: 20)",
+    )
+    search.add_argument(
+        "--skip",
+        type=int, default=0,
+        help="分页偏移 (默认: 0)",
+    )
+    search.add_argument(
+        "--format", "-f",
+        choices=["table", "json", "md"],
+        default="table",
+        dest="fmt",
+        help="输出格式 (默认: table)",
+    )
+
     return parser
 
 
@@ -200,14 +235,94 @@ async def cmd_post(args: argparse.Namespace) -> None:
             console.print(f"[dim]  → {path}[/dim]")
 
 
+async def cmd_search(args: argparse.Namespace) -> None:
+    from nodeseek.fetchers.search import search_posts
+
+    if not args.keyword and not args.category and not args.author:
+        console.print("[red]错误: 至少指定关键词、--category 或 --author 之一[/red]")
+        sys.exit(1)
+
+    kw_display = args.keyword or ""
+    cat_display = f" [{args.category}]" if args.category else ""
+    console.print(f"[cyan]→ 搜索[bold]{kw_display}{cat_display}[/bold]...[/cyan]")
+
+    resp = await search_posts(
+        keyword=args.keyword,
+        category=args.category,
+        author=args.author,
+        limit=args.limit,
+        skip=args.skip,
+        verbose=args.verbose,
+    )
+
+    console.print(
+        f"[green]  ✓ 共 {resp.total} 条，显示 {len(resp.results)} 条[/green]"
+    )
+
+    if not resp.results:
+        console.print("[yellow]没有匹配的帖子[/yellow]")
+        return
+
+    if args.fmt == "table":
+        from rich.table import Table
+        table = Table(show_header=True, header_style="bold magenta", box=None)
+        table.add_column("#",        style="dim",    width=4)
+        table.add_column("post_id",  style="cyan",   width=8)
+        table.add_column("分类",     style="yellow",  width=10)
+        table.add_column("标题",                      ratio=4)
+        table.add_column("作者",     style="green",   width=14)
+        table.add_column("发布时间", style="dim",     width=20)
+        for i, r in enumerate(resp.results, 1):
+            pub = r.pub_date[:16].replace("T", " ") if r.pub_date else ""
+            table.add_row(str(i), str(r.post_id), r.category, r.title, r.author, pub)
+        console.print(table)
+
+    elif args.fmt == "json":
+        import json
+        output = {
+            "total": resp.total,
+            "skip": resp.skip,
+            "limit": resp.limit,
+            "data": [
+                {
+                    "post_id": r.post_id,
+                    "title": r.title,
+                    "description": r.description,
+                    "category": r.category,
+                    "author": r.author,
+                    "pub_date": r.pub_date,
+                    "link": r.link,
+                }
+                for r in resp.results
+            ],
+        }
+        console.print_json(json.dumps(output, ensure_ascii=False))
+
+    elif args.fmt == "md":
+        lines = [
+            f"# 搜索结果：{args.keyword or ''}\n",
+            f"共 {resp.total} 条，显示 {len(resp.results)} 条\n",
+        ]
+        for i, r in enumerate(resp.results, 1):
+            pub = r.pub_date[:16].replace("T", " ") if r.pub_date else ""
+            lines.append(f"## {i}. {r.title}")
+            lines.append(f"- **作者**: {r.author}  **分类**: {r.category}  **时间**: {pub}")
+            lines.append(f"- **链接**: {r.link}")
+            if r.description:
+                lines.append(f"- **摘要**: {r.description}")
+            lines.append("")
+        console.print("\n".join(lines))
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
     dispatch = {
-        "hot":  cmd_hot,
-        "user": cmd_user,
-        "post": cmd_post,
+        "hot":    cmd_hot,
+        "user":   cmd_user,
+        "post":   cmd_post,
+        "search": cmd_search,
     }
 
     try:

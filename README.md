@@ -29,6 +29,13 @@ uv run ns.py post 637248              # 单个帖子 → output/posts/post_63724
 uv run ns.py post 637248 637250       # 多个帖子
 uv run ns.py post 637248 --no-comments  # 只要正文
 uv run ns.py post 637248 --format md  # Markdown 格式
+
+# 关键词搜索（调用聚合 API）
+uv run ns.py search claude            # 搜索含 "claude" 的帖子（表格输出）
+uv run ns.py search vps --category trade --limit 30  # 交易区 VPS 相关
+uv run ns.py search --author shaw-deng               # 按作者搜索
+uv run ns.py search claude --format json             # JSON 输出
+uv run ns.py search claude --format md               # Markdown 输出（适合 AI 分析）
 ```
 
 ## 数据源
