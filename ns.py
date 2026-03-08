@@ -145,6 +145,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="输出格式 (默认: table)",
     )
 
+    # ── sync-cookies ───────────────────────────────────────────────────
+    sync = subparsers.add_parser(
+        "sync-cookies",
+        help="从已登录的 Chrome 中读取 NodeSeek cookies，保存到 .env",
+    )
+    sync.add_argument(
+        "--browser",
+        choices=["chrome", "firefox", "safari"],
+        default="chrome",
+        help="读取哪个浏览器的 cookies (默认: chrome)",
+    )
+
     return parser
 
 
@@ -188,7 +200,6 @@ async def cmd_user(args: argparse.Namespace) -> None:
         username=args.username,
         uid=args.uid,
         max_pages=args.pages,
-        cookie_file=args.cookie_file,
         verbose=args.verbose,
     )
 
@@ -234,6 +245,56 @@ async def cmd_post(args: argparse.Namespace) -> None:
             path = export_post_md(detail, output_dir=args.output)
             console.print(f"[dim]  → {path}[/dim]")
 
+async def cmd_sync_cookies(args: argparse.Namespace) -> None:
+    """
+    从用户真实浏览器中自动提取 NodeSeek cookies，保存到 .env。
+    这样 Playwright 就能带着真实的 cf_clearance 发请求，绕过 CF 拦截。
+    """
+    from nodeseek.browser import load_cookies_from_chrome, save_cookies_to_env, _cookiejar_to_list
+    from nodeseek import config
+    import browser_cookie3
+
+    browser_name = getattr(args, "browser", "chrome")
+    console.print(f"[cyan]→ 从 [bold]{browser_name}[/bold] 读取 NodeSeek cookies...[/cyan]")
+    console.print("[dim]  可能会弹出 macOS 键盘访问权限请求，请允许。[/dim]")
+
+    try:
+        if browser_name == "chrome":
+            jar = browser_cookie3.chrome(domain_name="nodeseek.com")
+        elif browser_name == "firefox":
+            jar = browser_cookie3.firefox(domain_name="nodeseek.com")
+        else:
+            jar = browser_cookie3.safari(domain_name="nodeseek.com")
+
+        cookies = _cookiejar_to_list(jar)
+    except Exception as e:
+        console.print(f"[red]读取 cookies 失败: {e}[/red]")
+        return
+
+    if not cookies:
+        console.print(
+            "[yellow]⚠️  未找到 NodeSeek 相关 cookies，"
+            "请确认 Chrome 中已登录 nodeseek.com。[/yellow]"
+        )
+        return
+
+    # 显示关键 cookie
+    key_names = {"cf_clearance", "memberInfo", "__cf_bm"}
+    found_keys = [c["name"] for c in cookies if c["name"] in key_names]
+    console.print(f"[green]✓ 找到 {len(cookies)} 条 cookies，关键: {', '.join(found_keys) or '无'}[/green]")
+
+    if "cf_clearance" not in found_keys:
+        console.print(
+            "[yellow]⚠️  未找到 cf_clearance，建议先在 Chrome 中访问node seek.com 任意页面，"
+            "常规浏览 1~2 分钟后再运行此命令。[/yellow]"
+        )
+
+    env_path = save_cookies_to_env(cookies)
+    console.print(
+        f"[green bold]✓ 已将 {len(cookies)} 条 cookies 写入 {env_path}。[/green bold]\n"
+        f"[dim]后续运行 post/user 命令将自动使用这些 cookies。[/dim]\n"
+        f"[dim]cf_clearance 通常有和期 1~24 小时，过期后重新运行此命令即可。[/dim]"
+    )
 
 async def cmd_search(args: argparse.Namespace) -> None:
     from nodeseek.fetchers.search import search_posts
@@ -319,10 +380,11 @@ def main() -> None:
     args = parser.parse_args()
 
     dispatch = {
-        "hot":    cmd_hot,
-        "user":   cmd_user,
-        "post":   cmd_post,
-        "search": cmd_search,
+        "hot":          cmd_hot,
+        "user":         cmd_user,
+        "post":         cmd_post,
+        "search":       cmd_search,
+        "sync-cookies": cmd_sync_cookies,
     }
 
     try:

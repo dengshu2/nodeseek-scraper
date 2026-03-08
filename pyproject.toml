@@ -9,6 +9,8 @@ dependencies = [
     "lxml>=5.0",
     "cssselect>=1.2",
     "rich>=13.0",
+    "browser-cookie3>=0.19",
+    "python-dotenv>=1.0",
 ]
 
 [project.scripts]

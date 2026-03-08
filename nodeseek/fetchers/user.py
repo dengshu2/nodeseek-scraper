@@ -2,7 +2,7 @@
 user.py — 用户评论抓取
 
 流程:
-  1. Playwright 访问主页，等待 Cloudflare 握手通过
+  1. 使用 persistent_browser（持久化 Profile）启动 Playwright
   2. 访问 /member?t={username} → 等待重定向到 /space/{uid}，提取 UID
   3. 循环调用 /api/content/list-comments?uid={uid}&page=N
      每页 15 条，直到返回空列表为止
@@ -14,7 +14,6 @@ user.py — 用户评论抓取
 """
 import asyncio
 import re
-from pathlib import Path
 from typing import Optional
 
 from rich.console import Console
@@ -22,6 +21,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 
 from nodeseek.models import UserComment, UserProfile
 from nodeseek import config
+from nodeseek.browser import persistent_browser
 
 # NodeSeek /api/content/list-comments 服务端翻页上限
 # 实测在第 35 页时返回空数组，约可获取最近 510 条评论
@@ -35,58 +35,43 @@ async def fetch_user_comments(
     username: Optional[str] = None,
     uid: Optional[int] = None,
     max_pages: int = 0,
-    cookie_file: Optional[str] = None,
     verbose: bool = False,
 ) -> UserProfile:
     """
     抓取用户全部评论并返回 UserProfile。
 
     Args:
-        username:    用户名（与 uid 二选一）
-        uid:         直接指定 UID，跳过 username 解析
-        max_pages:   最多拉取页数，0 = 全部
-        cookie_file: Netscape 格式 cookie 文件路径（可选）
-        verbose:     是否输出调试日志
+        username:  用户名（与 uid 二选一）
+        uid:       直接指定 UID，跳过 username 解析
+        max_pages: 最多拉取页数，0 = 全部
+        verbose:   是否输出调试日志
     """
-    from playwright.async_api import async_playwright
-
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
-        ctx = await browser.new_context(user_agent=config.USER_AGENT)
-
-        # 加载 cookie 文件（可选）
-        if cookie_file:
-            _load_cookies(ctx, cookie_file, verbose)
-
+    async with persistent_browser(headless=True) as ctx:
         page = await ctx.new_page()
 
-        try:
-            # ── Step 1: 主页握手，等 CF 放行 ───────────────────────
-            if verbose:
-                console.print(f"[dim]→ 访问主页 (CF 握手)...[/dim]")
+        # ── Step 1: 主页握手，等 CF 放行 ───────────────────────
+        if verbose:
+            console.print("[dim]→ 访问主页 (CF 握手)...[/dim]")
 
-            await page.goto(config.BASE_URL, timeout=30_000)
-            await asyncio.sleep(config.CF_WAIT_SECONDS)
+        await page.goto(config.BASE_URL, timeout=30_000)
+        await asyncio.sleep(config.CF_WAIT_SECONDS)
 
-            if verbose:
-                console.print(f"[dim]  当前 URL: {page.url}[/dim]")
+        if verbose:
+            console.print(f"[dim]  当前 URL: {page.url}[/dim]")
 
-            # ── Step 2: 解析 username → UID ───────────────────────
-            if uid is None:
-                console.print(f"[cyan]→ 解析用户名 [bold]{username}[/bold] → UID...[/cyan]")
-                uid = await _resolve_uid(page, username, verbose)
-                console.print(f"[green]  ✓ UID = {uid}[/green]")
-            else:
-                console.print(f"[cyan]→ 使用 UID = {uid}[/cyan]")
-                # 即使直接指定 UID，仍需跳转一次获取用户名（如果 username 未提供）
-                if not username:
-                    username = await _resolve_username(page, uid, verbose)
+        # ── Step 2: 解析 username → UID ───────────────────────
+        if uid is None:
+            console.print(f"[cyan]→ 解析用户名 [bold]{username}[/bold] → UID...[/cyan]")
+            uid = await _resolve_uid(page, username, verbose)
+            console.print(f"[green]  ✓ UID = {uid}[/green]")
+        else:
+            console.print(f"[cyan]→ 使用 UID = {uid}[/cyan]")
+            # 即使直接指定 UID，仍需跳转一次获取用户名（如果 username 未提供）
+            if not username:
+                username = await _resolve_username(page, uid, verbose)
 
-            # ── Step 3: 分页拉取评论 ───────────────────────────────
-            comments = await _fetch_all_comments(page, uid, max_pages, verbose)
-
-        finally:
-            await browser.close()
+        # ── Step 3: 分页拉取评论 ───────────────────────────────
+        comments = await _fetch_all_comments(page, uid, max_pages, verbose)
 
     return UserProfile(
         uid=uid,
@@ -220,34 +205,3 @@ async def _fetch_all_comments(
         f"[green]  ✓ 共 {len(all_comments)} 条评论，{page_num - 1} 页[/green]"
     )
     return all_comments
-
-
-def _load_cookies(ctx, cookie_file: str, verbose: bool) -> None:
-    """加载 Netscape 格式 cookie 文件（浏览器导出格式）"""
-    import http.cookiejar
-
-    jar = http.cookiejar.MozillaCookieJar()
-    try:
-        jar.load(cookie_file, ignore_discard=True, ignore_expires=True)
-    except Exception as e:
-        console.print(f"[yellow]cookie 文件加载失败: {e}[/yellow]")
-        return
-
-    cookies = []
-    for ck in jar:
-        cookies.append({
-            "name": ck.name,
-            "value": ck.value,
-            "domain": ck.domain,
-            "path": ck.path,
-            "expires": ck.expires or -1,
-            "httpOnly": bool(ck.has_nonstandard_attr("HttpOnly")),
-            "secure": bool(ck.secure),
-        })
-
-    if verbose:
-        console.print(f"[dim]→ 已加载 {len(cookies)} 条 cookie[/dim]")
-
-    # Playwright context 级别暂不支持直接 add_cookies，需在 page 级别调用
-    # 这里先存起来，在 page.goto 后用 page.context.add_cookies() 应用
-    ctx._pending_cookies = cookies  # type: ignore[attr-defined]

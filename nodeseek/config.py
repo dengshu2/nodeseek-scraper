@@ -6,6 +6,13 @@ from pathlib import Path
 # 项目根目录
 ROOT_DIR = Path(__file__).parent.parent
 
+# Playwright fallback 模式的 persistent profile（cookie 注入备用）
+BROWSER_PROFILE_DIR = ROOT_DIR / ".browser-profile"
+
+# 爬虫专用 headless Chrome Profile（与用户日常 Chrome 完全隔离）
+# 自动启动时使用，内存占用 ~150-200MB，无 GUI 弹窗
+SCRAPER_CDP_PROFILE_DIR = ROOT_DIR / ".chrome-scraper-profile"
+
 # 默认输出目录
 OUTPUT_DIR = ROOT_DIR / "output"
 

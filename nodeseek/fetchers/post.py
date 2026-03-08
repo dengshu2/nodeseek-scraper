@@ -2,10 +2,11 @@
 post.py — 帖子详情抓取
 
 工作流:
-  1. Playwright 访问主页（CF 握手）
-  2. 从 post-{id}-1 开始，自动检测翻页，抓完所有评论
-  3. 每页 10 条评论，通过 .pager-next 检测是否有下一页
-  4. 支持多帖子批量抓取（共享同一浏览器）
+  1. 使用 persistent_browser（持久化 Profile）启动 Playwright
+  2. 访问主页完成 CF 握手（已登录 profile 通常可跳过 Turnstile）
+  3. 从 post-{id}-1 开始，自动检测翻页，抓完所有评论
+  4. 每页 10 条评论，通过 .pager-next 检测是否有下一页
+  5. 支持多帖子批量抓取（共享同一浏览器 session）
 
 分页说明:
   - 第 1 页: 1 个主帖 + 最多 10 条评论，URL = /post-{id}-1
@@ -20,6 +21,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from nodeseek.models import PostDetail, Comment
 from nodeseek import config
+from nodeseek.browser import persistent_browser
 
 console = Console()
 
@@ -43,21 +45,21 @@ async def fetch_posts(
     Returns:
         PostDetail 列表（顺序与输入 ID 一致，失败的跳过）
     """
-    from playwright.async_api import async_playwright
     from nodeseek.parsers.post_parser import parse_post_page
 
     results: list[PostDetail] = []
 
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
-        ctx = await browser.new_context(user_agent=config.USER_AGENT)
-
-        # CF 握手
+    async with persistent_browser(headless=True) as ctx:
         page = await ctx.new_page()
+
+        # CF 握手（有 profile 时通常 <1s 就通过）
         if verbose:
             console.print("[dim]→ 访问主页 (CF 握手)...[/dim]")
         await page.goto(config.BASE_URL, timeout=30_000)
         await asyncio.sleep(config.CF_WAIT_SECONDS)
+
+        if verbose:
+            console.print(f"[dim]  当前 URL: {page.url}[/dim]")
 
         with Progress(
             SpinnerColumn(),
@@ -96,8 +98,6 @@ async def fetch_posts(
                 finally:
                     progress.remove_task(task)
 
-        await browser.close()
-
     return results
 
 
@@ -130,7 +130,10 @@ async def _fetch_single_post(
             await page.wait_for_selector(".content-item", timeout=15_000)
         except Exception:
             if page_num == 1:
-                console.print(f"[yellow]  ⚠️ 帖子 {post_id}: 未找到内容，可能 CF 未通过[/yellow]")
+                console.print(
+                    f"[yellow]  ⚠️ 帖子 {post_id}: 未找到内容，可能 CF 未通过\n"
+                    f"  [dim]提示：尝试运行 [bold]uv run ns.py sync-cookies[/bold] 同步 Cookie[/dim][/yellow]"
+                )
             break
 
         html = await page.content()
