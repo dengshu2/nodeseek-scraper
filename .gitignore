@@ -41,6 +41,5 @@ cookies.txt
 # pytest
 .pytest_cache/
 
-# 浏览器 Profile（含 cf_clearance、session cookie 等敏感信息，不应提交）
-.browser-profile/
+# CDP 专用 Chrome Profile（含 cf_clearance、session cookie 等敏感信息，不应提交）
 .chrome-scraper-profile/
