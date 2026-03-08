@@ -131,11 +131,13 @@ async def _auto_launch_cdp_chrome(pw) -> Optional[object]:
             "--disable-extensions",
             "--disable-default-apps",
             "--disable-sync",
-            # 将窗口移到屏幕极左上角之外，视觉上完全隐藏，
+            # 将窗口移到屏幕极左上角之外 + 最小化，视觉上完全隐藏，
             # 但进程仍是 GUI 模式（非 headless），CF 指纹检测不受影响。
+            # --window-state=minimized 防止 Playwright 触发 goto 时窗口弹到前台。
             # 注意：Dock 里仍会出现图标，是正常现象。
             "--window-position=-10000,-10000",
             "--window-size=1,1",
+            "--window-state=minimized",
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

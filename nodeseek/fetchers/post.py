@@ -50,7 +50,8 @@ async def fetch_posts(
     results: list[PostDetail] = []
 
     async with persistent_browser(headless=True) as ctx:
-        page = await ctx.new_page()
+        # 优先复用 CDP context 中已有的 page（避免 new_page 触发窗口弹出）
+        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
 
         # CF 握手（有 profile 时通常 <1s 就通过）
         if verbose:

@@ -47,7 +47,8 @@ async def fetch_user_comments(
         verbose:   是否输出调试日志
     """
     async with persistent_browser(headless=True) as ctx:
-        page = await ctx.new_page()
+        # 优先复用 CDP context 中已有的 page（避免 new_page 触发窗口弹出）
+        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
 
         # ── Step 1: 主页握手，等 CF 放行 ───────────────────────
         if verbose:

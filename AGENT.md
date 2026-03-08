@@ -81,7 +81,7 @@ _try_connect_cdp()  → 检测 9222 端口是否有 Chrome 已启动
     ↓ 无：
 _auto_launch_cdp_chrome()
     → subprocess.Popen 启动 GUI Chrome
-    → --window-position=-10000,-10000 --window-size=1,1  ← 窗口踢至屏幕外（2026-03 优化）
+    → --window-position=-10000,-10000 --window-size=1,1 --window-state=minimized  ← 窗口踢至屏幕外+最小化（2026-03 优化）
     → Dock 里会有图标（正常现象，GUI 进程标志）
     → 轮询等待 CDP 就绪（最多 15 秒）
     ↓
@@ -143,7 +143,8 @@ python-dotenv     # 读写 .env 中的 NS_COOKIES
 - [x] 用户评论（多格式：json/csv/md）
 - [x] 关键词搜索（多格式，支持 --output 保存文件）
 - [x] Cloudflare 自动绕过（CDP 常驻模式）
-- [x] Chrome 窗口踢至屏幕外（2026-03-08）
+- [x] Chrome 窗口踢至屏幕外 + 最小化（防弹窗，2026-03-08）
+- [x] CDP context 复用已有 page（减少 new_page 触发窗口弹出，2026-03-08）
 
 ### 已知约束
 - CF Turnstile 首次/过期需人工验证一次，无法完全自动化
