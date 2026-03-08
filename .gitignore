@@ -40,3 +40,6 @@ cookies.txt
 
 # 浏览器持久化 Profile（含 cf_clearance、session cookie 等敏感信息）
 .browser-profile/
+
+# Chrome 爬虫专用 Profile（运行时生成，不应提交）
+.chrome-scraper-profile/
