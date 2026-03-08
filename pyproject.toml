@@ -20,5 +20,10 @@ ns = "ns:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+# 将根目录的 ns.py 一并打包，使 [project.scripts] 入口点 "ns:main" 生效
+packages = ["nodeseek"]
+include = ["ns.py"]
+
 [dependency-groups]
 dev = []

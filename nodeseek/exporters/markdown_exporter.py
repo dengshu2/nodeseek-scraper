@@ -7,17 +7,12 @@ from typing import Optional
 
 from nodeseek import config
 from nodeseek.models import UserProfile
-
-
-def _output_dir(subdir: Path, override: Optional[str]) -> Path:
-    d = Path(override) if override else subdir
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+from nodeseek.exporters.utils import make_output_dir
 
 
 def export_user_md(profile: UserProfile, output_dir: Optional[str] = None) -> Path:
     """导出用户评论为 Markdown（适合 AI 分析）"""
-    d = _output_dir(config.USER_OUTPUT_DIR, output_dir)
+    d = make_output_dir(config.USER_OUTPUT_DIR, output_dir)
     path = d / f"{profile.username}.md"
 
     lines = [
@@ -53,7 +48,7 @@ def export_user_md(profile: UserProfile, output_dir: Optional[str] = None) -> Pa
 
 def export_post_md(detail, output_dir: Optional[str] = None) -> Path:
     """导出帖子详情为 Markdown"""
-    d = _output_dir(config.POST_OUTPUT_DIR, output_dir)
+    d = make_output_dir(config.POST_OUTPUT_DIR, output_dir)
     path = d / f"post_{detail.id}.md"
 
     lines = [

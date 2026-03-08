@@ -115,15 +115,23 @@ async def _resolve_username(page, uid: int, verbose: bool) -> str:
     await page.goto(url, timeout=30_000)
     await asyncio.sleep(1)
 
+    username: Optional[str] = None
     try:
+        # 按优先级列出候选选择器，NodeSeek 页面结构变化时可在此追加
         username = await page.eval_on_selector(
-            "h1.username, .user-name, .profile-name",
-            "el => el.innerText.trim()"
+            ".username, h1.username, .user-name, .profile-name",
+            "el => el.innerText.trim()",
         )
     except Exception:
-        username = str(uid)
+        pass  # 选择器未命中时 eval_on_selector 抛 Exception
 
-    if verbose:
+    if not username:
+        console.print(
+            f"[yellow]⚠️  无法从页面解析 UID={uid} 的用户名"
+            f"（选择器未命中，可能页面结构已变更），将以 UID 字符串代替[/yellow]"
+        )
+        username = str(uid)
+    elif verbose:
         console.print(f"[dim]  username = {username}[/dim]")
 
     return username

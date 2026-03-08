@@ -8,23 +8,14 @@ from pathlib import Path
 from typing import Optional
 
 from nodeseek import config
-from nodeseek.models import HotPost, UserProfile
-
-
-def _output_dir(subdir: Path, override: Optional[str]) -> Path:
-    d = Path(override) if override else subdir
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _ts() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
+from nodeseek.models import HotPost, PostDetail, UserProfile
+from nodeseek.exporters.utils import make_output_dir, make_timestamp
 
 
 def export_hot(posts: list[HotPost], rank_type: str, output_dir: Optional[str] = None) -> Path:
     """导出热榜为 JSON，返回文件路径"""
-    d = _output_dir(config.HOT_OUTPUT_DIR, output_dir)
-    path = d / f"{rank_type}_{_ts()}.json"
+    d = make_output_dir(config.HOT_OUTPUT_DIR, output_dir)
+    path = d / f"{rank_type}_{make_timestamp()}.json"
 
     payload = {
         "rank_type": rank_type,
@@ -39,7 +30,7 @@ def export_hot(posts: list[HotPost], rank_type: str, output_dir: Optional[str] =
 
 def export_user(profile: UserProfile, output_dir: Optional[str] = None) -> Path:
     """导出用户评论为 JSON，返回文件路径"""
-    d = _output_dir(config.USER_OUTPUT_DIR, output_dir)
+    d = make_output_dir(config.USER_OUTPUT_DIR, output_dir)
     path = d / f"{profile.username}.json"
 
     payload = {
@@ -54,10 +45,9 @@ def export_user(profile: UserProfile, output_dir: Optional[str] = None) -> Path:
     return path
 
 
-def export_post(detail, output_dir: Optional[str] = None) -> Path:
+def export_post(detail: PostDetail, output_dir: Optional[str] = None) -> Path:
     """导出帖子详情为 JSON，返回文件路径"""
-    from nodeseek.models import PostDetail
-    d = _output_dir(config.POST_OUTPUT_DIR, output_dir)
+    d = make_output_dir(config.POST_OUTPUT_DIR, output_dir)
     path = d / f"post_{detail.id}.json"
 
     payload = {

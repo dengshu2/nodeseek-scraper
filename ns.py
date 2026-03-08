@@ -144,6 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="fmt",
         help="输出格式 (默认: table)",
     )
+    search.add_argument(
+        "--output", "-o",
+        default=None,
+        help="输出目录 (默认: output/search/)，仅 json/md 格式有效",
+    )
 
     # ── sync-cookies ───────────────────────────────────────────────────
     sync = subparsers.add_parser(
@@ -245,6 +250,7 @@ async def cmd_post(args: argparse.Namespace) -> None:
             path = export_post_md(detail, output_dir=args.output)
             console.print(f"[dim]  → {path}[/dim]")
 
+
 async def cmd_sync_cookies(args: argparse.Namespace) -> None:
     """
     从用户真实浏览器中自动提取 NodeSeek cookies，保存到 .env。
@@ -285,7 +291,7 @@ async def cmd_sync_cookies(args: argparse.Namespace) -> None:
 
     if "cf_clearance" not in found_keys:
         console.print(
-            "[yellow]⚠️  未找到 cf_clearance，建议先在 Chrome 中访问node seek.com 任意页面，"
+            "[yellow]⚠️  未找到 cf_clearance，建议先在 Chrome 中访问 nodeseek.com 任意页面，"
             "常规浏览 1~2 分钟后再运行此命令。[/yellow]"
         )
 
@@ -293,8 +299,9 @@ async def cmd_sync_cookies(args: argparse.Namespace) -> None:
     console.print(
         f"[green bold]✓ 已将 {len(cookies)} 条 cookies 写入 {env_path}。[/green bold]\n"
         f"[dim]后续运行 post/user 命令将自动使用这些 cookies。[/dim]\n"
-        f"[dim]cf_clearance 通常有和期 1~24 小时，过期后重新运行此命令即可。[/dim]"
+        f"[dim]cf_clearance 通常有效期 1~24 小时，过期后重新运行此命令即可。[/dim]"
     )
+
 
 async def cmd_search(args: argparse.Namespace) -> None:
     from nodeseek.fetchers.search import search_posts
@@ -340,6 +347,8 @@ async def cmd_search(args: argparse.Namespace) -> None:
 
     elif args.fmt == "json":
         import json
+        from pathlib import Path
+        from datetime import datetime
         output = {
             "total": resp.total,
             "skip": resp.skip,
@@ -357,9 +366,17 @@ async def cmd_search(args: argparse.Namespace) -> None:
                 for r in resp.results
             ],
         }
-        console.print_json(json.dumps(output, ensure_ascii=False))
+        out_dir = Path(args.output) if args.output else Path("output/search")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_kw = (args.keyword or "all").replace(" ", "_")
+        path = out_dir / f"search_{safe_kw}_{ts}.json"
+        path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+        console.print(f"[dim]  → {path}[/dim]")
 
     elif args.fmt == "md":
+        from pathlib import Path
+        from datetime import datetime
         lines = [
             f"# 搜索结果：{args.keyword or ''}\n",
             f"共 {resp.total} 条，显示 {len(resp.results)} 条\n",
@@ -372,7 +389,13 @@ async def cmd_search(args: argparse.Namespace) -> None:
             if r.description:
                 lines.append(f"- **摘要**: {r.description}")
             lines.append("")
-        console.print("\n".join(lines))
+        out_dir = Path(args.output) if args.output else Path("output/search")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_kw = (args.keyword or "all").replace(" ", "_")
+        path = out_dir / f"search_{safe_kw}_{ts}.md"
+        path.write_text("\n".join(lines), encoding="utf-8")
+        console.print(f"[dim]  → {path}[/dim]")
 
 
 def main() -> None:

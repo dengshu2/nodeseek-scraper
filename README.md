@@ -34,8 +34,9 @@ uv run ns.py post 637248 --format md  # Markdown 格式
 uv run ns.py search claude            # 搜索含 "claude" 的帖子（表格输出）
 uv run ns.py search vps --category trade --limit 30  # 交易区 VPS 相关
 uv run ns.py search --author shaw-deng               # 按作者搜索
-uv run ns.py search claude --format json             # JSON 输出
+uv run ns.py search claude --format json             # JSON 输出 → output/search/
 uv run ns.py search claude --format md               # Markdown 输出（适合 AI 分析）
+uv run ns.py search claude --format json --output /tmp/result/  # 保存到指定目录
 ```
 
 ## Cloudflare 处理机制

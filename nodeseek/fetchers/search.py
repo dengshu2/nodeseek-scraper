@@ -15,37 +15,17 @@ API 响应格式:
     "data": [{ "post_id", "title", "description", "category", "author", "pub_date", "link" }]
   }
 """
-from dataclasses import dataclass
 from typing import Optional
 
 import httpx
 from rich.console import Console
 
+from nodeseek.models import SearchResponse, SearchResult
+
 console = Console()
 
 # 自建聚合 API 地址
 SEARCH_API_URL = "https://nodeseek.dengshu.ovh/api/posts"
-
-
-@dataclass
-class SearchResult:
-    """搜索结果条目"""
-    post_id: int
-    title: str
-    description: str
-    category: str
-    author: str
-    pub_date: str       # ISO 8601
-    link: str
-
-
-@dataclass
-class SearchResponse:
-    """搜索响应"""
-    total: int
-    skip: int
-    limit: int
-    results: list[SearchResult]
 
 
 async def search_posts(

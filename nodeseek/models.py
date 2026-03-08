@@ -64,3 +64,24 @@ class UserProfile:
     username: str
     total_comments: int
     comments: list[UserComment] = field(default_factory=list)
+
+
+@dataclass
+class SearchResult:
+    """搜索结果条目（来自 nodeseek.dengshu.ovh 聚合 API）"""
+    post_id: int
+    title: str
+    description: str
+    category: str
+    author: str
+    pub_date: str       # ISO 8601
+    link: str
+
+
+@dataclass
+class SearchResponse:
+    """搜索响应（分页元数据 + 结果列表）"""
+    total: int
+    skip: int
+    limit: int
+    results: list[SearchResult] = field(default_factory=list)
