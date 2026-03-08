@@ -41,5 +41,6 @@ cookies.txt
 # pytest
 .pytest_cache/
 
-# Chrome 爬虫专用 Profile（运行时生成，和含敏感信息）
+# 浏览器 Profile（含 cf_clearance、session cookie 等敏感信息，不应提交）
+.browser-profile/
 .chrome-scraper-profile/
