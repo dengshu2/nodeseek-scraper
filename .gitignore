@@ -33,13 +33,13 @@ Thumbs.db
 *.swp
 *.swo
 
-# 环境变量（如有敏感 cookie 文件）
-*.env
-.env*
+# 环境变量（含敏感 cookie 信息）
+.env
+.env.*
 cookies.txt
 
-# 浏览器持久化 Profile（含 cf_clearance、session cookie 等敏感信息）
-.browser-profile/
+# pytest
+.pytest_cache/
 
-# Chrome 爬虫专用 Profile（运行时生成，不应提交）
+# Chrome 爬虫专用 Profile（运行时生成，和含敏感信息）
 .chrome-scraper-profile/

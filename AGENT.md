@@ -86,8 +86,7 @@ _auto_launch_cdp_chrome()
     → 轮询等待 CDP 就绪（最多 15 秒）
     ↓
 persistent_browser() (asynccontextmanager)
-    → get_all_cookies()：优先 .env NS_COOKIES，其次 browser-cookie3 读 Chrome
-    → ctx.add_cookies()：注入 cf_clearance 等 cookies
+    → browser.contexts[0] 获取已有 context（或 new_context）
     → yield ctx
     → browser.close()（仅断开 CDP，不终止 Chrome 进程）
 ```

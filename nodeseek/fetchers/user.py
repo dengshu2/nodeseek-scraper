@@ -177,11 +177,13 @@ async def _fetch_all_comments(
             if verbose:
                 console.print(f"[dim]  → 第 {page_num} 页...[/dim]")
 
-            result = await page.evaluate(f"""
-                fetch('/api/content/list-comments?uid={uid}&page={page_num}', {{
-                    headers: {{'Accept': 'application/json'}}
-                }}).then(r => r.json())
-            """)
+            result = await page.evaluate(
+                "([uid, page]) => fetch("
+                "`/api/content/list-comments?uid=${uid}&page=${page}`,"
+                " {headers: {'Accept': 'application/json'}})"
+                ".then(r => r.json())",
+                [uid, page_num],
+            )
 
             if not result.get("success"):
                 console.print(

@@ -132,8 +132,8 @@ async def _fetch_single_post(
         except Exception:
             if page_num == 1:
                 console.print(
-                    f"[yellow]  ⚠️ 帖子 {post_id}: 未找到内容，可能 CF 未通过\n"
-                    f"  [dim]提示：尝试运行 [bold]uv run ns.py sync-cookies[/bold] 同步 Cookie[/dim][/yellow]"
+                    f"[yellow]  ⚠️ 帖子 {post_id}: 未找到内容元素，可能 CF 未通过[/yellow]\n"
+                    f"  [dim]提示：请确认已启动的 Chrome 访问过 nodeseek.com 帖子页并完成 Cloudflare 验证。[/dim]"
                 )
             break
 
@@ -162,13 +162,18 @@ async def _fetch_single_post(
                 break  # 该页无评论，已到末尾
 
         # 检测是否有下一页
-        if not parsed._has_next_page:  # type: ignore[attr-defined]
+        if not parsed.has_next_page:
             break
 
         page_num += 1
 
-    # 合并所有评论到 detail
+    # 合并所有评论到 detail，按楼层号排序
     if detail and include_comments:
-        detail.comments = (detail.comments or []) + all_comments
+        merged = (detail.comments or []) + all_comments
+        # 按楼层号数值排序（#1, #2, ...）
+        def _floor_key(c):
+            s = c.floor.lstrip("#")
+            return int(s) if s.isdigit() else 0
+        detail.comments = sorted(merged, key=_floor_key)
 
     return detail

@@ -68,6 +68,25 @@ def export_post_md(detail, output_dir: Optional[str] = None) -> Path:
         f"",
     ]
 
+    # 主帖图片
+    if detail.images:
+        lines += ["## 正文图片", ""]
+        for img_url in detail.images:
+            lines.append(f"![]({img_url})")
+        lines.append("")
+
+    # 主帖贴纸
+    if detail.stickers:
+        lines += [f"**贴纸**: {', '.join(detail.stickers)}", ""]
+
+    # 主帖外链
+    if detail.links:
+        lines += ["## 正文外链", ""]
+        for lk in detail.links:
+            text = lk.get("text") or lk.get("url", "")
+            lines.append(f"- [{text}]({lk['url']})")
+        lines.append("")
+
     if detail.comments:
         lines += [f"## 评论（共 {len(detail.comments)} 条）", f""]
         for c in detail.comments:
@@ -80,6 +99,21 @@ def export_post_md(detail, output_dir: Optional[str] = None) -> Path:
                 f"> {c.content}",
                 f"",
             ]
+            # 评论图片
+            if c.images:
+                for img_url in c.images:
+                    lines.append(f"![]({img_url})")
+                lines.append("")
+            # 评论贴纸
+            if c.stickers:
+                lines.append(f"*贴纸: {', '.join(c.stickers)}*")
+                lines.append("")
+            # 评论外链
+            if c.links:
+                for lk in c.links:
+                    text = lk.get("text") or lk.get("url", "")
+                    lines.append(f"🔗 [{text}]({lk['url']})")
+                lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")
     return path

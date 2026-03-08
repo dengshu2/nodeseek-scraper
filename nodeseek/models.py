@@ -30,6 +30,9 @@ class Comment:
     content: str
     post_time: str          # ISO 8601
     is_poster: bool
+    images: list[str] = field(default_factory=list)   # 正文图片 URL
+    stickers: list[str] = field(default_factory=list) # 贴纸名称（已过滤出来）
+    links: list[dict] = field(default_factory=list)   # 外部链接 [{text, url}]
 
 
 @dataclass
@@ -44,7 +47,11 @@ class PostDetail:
     post_time: str
     content: str            # 纯文本
     content_html: str       # HTML
+    images: list[str] = field(default_factory=list)   # 主帖正文图片 URL
+    stickers: list[str] = field(default_factory=list) # 主帖贴纸名称
+    links: list[dict] = field(default_factory=list)   # 主帖外部链接 [{text, url}]
     comments: list[Comment] = field(default_factory=list)
+    has_next_page: bool = False                        # 是否有下一页（供 fetcher 翻页使用）
 
 
 @dataclass

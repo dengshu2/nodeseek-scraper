@@ -9,8 +9,6 @@ dependencies = [
     "lxml>=5.0",
     "cssselect>=1.2",
     "rich>=13.0",
-    "browser-cookie3>=0.19",
-    "python-dotenv>=1.0",
 ]
 
 [project.scripts]
@@ -26,4 +24,6 @@ packages = ["nodeseek"]
 include = ["ns.py"]
 
 [dependency-groups]
-dev = []
+dev = [
+    "pytest>=9.0.2",
+]
