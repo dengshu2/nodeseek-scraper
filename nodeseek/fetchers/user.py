@@ -2,7 +2,7 @@
 user.py — 用户评论抓取
 
 流程:
-  1. 使用 persistent_browser（持久化 Profile）启动 Playwright
+  1. 使用 persistent_browser（Camoufox 反指纹引擎）启动浏览器
   2. 访问 /member?t={username} → 等待重定向到 /space/{uid}，提取 UID
   3. 循环调用 /api/content/list-comments?uid={uid}&page=N
      每页 15 条，直到返回空列表为止
@@ -47,12 +47,11 @@ async def fetch_user_comments(
         verbose:   是否输出调试日志
     """
     async with persistent_browser(headless=True) as ctx:
-        # 优先复用 CDP context 中已有的 page（避免 new_page 触发窗口弹出）
-        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+        page = await ctx.new_page()
 
-        # ── Step 1: 主页握手，等 CF 放行 ───────────────────────
+        # ── Step 1: 会话预热（Camoufox 自动绕过 CF）───────────
         if verbose:
-            console.print("[dim]→ 访问主页 (CF 握手)...[/dim]")
+            console.print("[dim]→ 访问主页 (会话预热)...[/dim]")
 
         await page.goto(config.BASE_URL, timeout=30_000)
         await asyncio.sleep(config.CF_WAIT_SECONDS)

@@ -22,7 +22,7 @@ ns.py — NodeSeek 数据工具 CLI 入口
   uv run ns.py search vps --category trade --limit 30
   uv run ns.py search claude --format md
 
-注意：工具会自动启动并接管 Chrome（CDP 模式），首次运行需完成一次 Cloudflare 验证。
+注意：post/user/profile 命令使用 Camoufox（反指纹 Firefox）自动绕过 Cloudflare，无需手动验证。
 """
 import argparse
 import asyncio
@@ -269,8 +269,6 @@ async def cmd_post(args: argparse.Namespace) -> None:
             from nodeseek.exporters.markdown_exporter import export_post_md
             path = export_post_md(detail, output_dir=args.output)
             console.print(f"[dim]  → {path}[/dim]")
-
-
 
 
 

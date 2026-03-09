@@ -2,8 +2,8 @@
 post.py — 帖子详情抓取
 
 工作流:
-  1. 使用 persistent_browser（持久化 Profile）启动 Playwright
-  2. 访问主页完成 CF 握手（已登录 profile 通常可跳过 Turnstile）
+  1. 使用 persistent_browser（Camoufox 反指纹引擎）启动浏览器
+  2. 访问主页建立会话（Camoufox 自动绕过 CF）
   3. 从 post-{id}-1 开始，自动检测翻页，抓完所有评论
   4. 每页 10 条评论，通过 .pager-next 检测是否有下一页
   5. 支持多帖子批量抓取（共享同一浏览器 session）
@@ -50,12 +50,11 @@ async def fetch_posts(
     results: list[PostDetail] = []
 
     async with persistent_browser(headless=True) as ctx:
-        # 优先复用 CDP context 中已有的 page（避免 new_page 触发窗口弹出）
-        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+        page = await ctx.new_page()
 
-        # CF 握手（有 profile 时通常 <1s 就通过）
+        # 会话预热（Camoufox 自动绕过 CF，仅需等页面渲染）
         if verbose:
-            console.print("[dim]→ 访问主页 (CF 握手)...[/dim]")
+            console.print("[dim]→ 访问主页 (会话预热)...[/dim]")
         await page.goto(config.BASE_URL, timeout=30_000)
         await asyncio.sleep(config.CF_WAIT_SECONDS)
 
@@ -133,7 +132,7 @@ async def _fetch_single_post(
             if page_num == 1:
                 console.print(
                     f"[yellow]  ⚠️ 帖子 {post_id}: 未找到内容元素，可能 CF 未通过[/yellow]\n"
-                    f"  [dim]提示：请确认已启动的 Chrome 访问过 nodeseek.com 帖子页并完成 Cloudflare 验证。[/dim]"
+                    f"  [dim]提示：Camoufox 自动绕过 CF 失败，请稍后重试或使用 --verbose 查看详情。[/dim]"
                 )
             break
 

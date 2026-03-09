@@ -5,7 +5,7 @@ API:
   GET /api/account/getInfo/{uid}
 
 返回字段包括：等级、鸡腿、星辰、主题帖数、评论数、关注数、粉丝数、注册时间。
-该 API 需要通过 Cloudflare 保护（使用 CDP 浏览器内 fetch）。
+该 API 需要通过 Cloudflare 保护（使用 Camoufox 浏览器内 fetch 自动绕过）。
 """
 import asyncio
 import re
@@ -37,11 +37,11 @@ async def fetch_user_profile(
         UserBasicInfo 数据对象
     """
     async with persistent_browser(headless=True) as ctx:
-        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+        page = await ctx.new_page()
 
-        # CF 握手
+        # 会话预热（Camoufox 自动绕过 CF）
         if verbose:
-            console.print("[dim]→ 访问主页 (CF 握手)...[/dim]")
+            console.print("[dim]→ 访问主页 (会话预热)...[/dim]")
         await page.goto(config.BASE_URL, timeout=30_000)
         await asyncio.sleep(config.CF_WAIT_SECONDS)
 
