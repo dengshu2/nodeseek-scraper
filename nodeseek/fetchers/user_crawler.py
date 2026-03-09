@@ -4,8 +4,8 @@ user_crawler.py — 全量 UID 枚举爬取
 遍历 UID 1 ~ max_uid，批量调用 /api/account/getInfo/{uid}，
 将所有 username ↔ uid 映射写入 SQLite。
 
-使用 page.evaluate + Promise.all 在浏览器内并发 fetch，
-单次 CF 验证后即可全程自动跑完。
+使用 Camoufox 浏览器内 page.evaluate + Promise.all 并发 fetch，
+自动绕过 Cloudflare，无需手动验证。
 """
 import asyncio
 
@@ -109,24 +109,23 @@ async def crawl_users(
     consecutive_not_found = 0  # 连续「真正不存在」的 UID
 
     async with persistent_browser(headless=True) as ctx:
-        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+        page = await ctx.new_page()
 
-        # CF 握手
-        console.print("[dim]→ CF 握手...[/dim]")
+        # 会话预热（Camoufox 自动绕过 CF）
+        console.print("[dim]→ 会话预热...[/dim]")
         await page.goto(config.BASE_URL, timeout=30_000)
         await asyncio.sleep(config.CF_WAIT_SECONDS)
 
         title = await page.title()
         if "challenge" in title.lower() or "请稍候" in title:
             console.print(
-                "[bold red]✗ 需要手动通过 Cloudflare 验证！[/bold red]\n"
-                "  请在任务栏 Chrome 中打开 https://www.nodeseek.com\n"
-                "  完成验证后，重新运行此命令。"
+                "[bold red]✗ Camoufox 自动绕过 CF 失败！[/bold red]\n"
+                "  请稍后重试，或加大 --delay 参数。"
             )
             conn.close()
             return
 
-        console.print(f"[green]✓ CF 通过 (页面: {title[:30]})[/green]")
+        console.print(f"[green]✓ 会话就绪 (页面: {title[:30]})[/green]")
 
         with Progress(
             TextColumn("[bold cyan]{task.description}"),

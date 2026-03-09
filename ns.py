@@ -313,7 +313,6 @@ async def cmd_post(args: argparse.Namespace) -> None:
             console.print(f"[dim]  → {path}[/dim]")
 
 
-
 async def cmd_search(args: argparse.Namespace) -> None:
     from nodeseek.fetchers.search import search_posts
 
