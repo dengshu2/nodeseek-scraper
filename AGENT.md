@@ -1,6 +1,7 @@
 # NodeSeek Scraper — AI Agent 上下文文档
 
 > 本文件专为 AI 编程助手（Cursor、Claude、Gemini 等）设计，提供快速上下文，
+> **⚠️ 项目支持 Windows / macOS / Linux 三平台**。
 > 避免跨对话重新理解项目结构。每次新对话开始时请先读本文。
 
 ---
@@ -81,9 +82,11 @@ _try_connect_cdp()  → 检测 9222 端口是否有 Chrome 已启动
     ↓ 无：
 _auto_launch_cdp_chrome()
     → subprocess.Popen 启动 GUI Chrome
-    → --window-position=-10000,-10000 --window-size=1,1 --window-state=minimized  ← 窗口踢至屏幕外+最小化（2026-03 优化）
-    → Dock 里会有图标（正常现象，GUI 进程标志）
-    → 轮询等待 CDP 就绪（最多 15 秒）
+     → --window-position=-10000,-10000 --window-size=1,1  ← 窗口踢至屏幕外（2026-03 优化）
+     → Windows: subprocess.STARTUPINFO(SW_SHOWMINIMIZED) + CREATE_NEW_PROCESS_GROUP
+     → macOS/Linux: --window-state=minimized
+     → 任务栏/Dock 里会有图标（正常现象，GUI 进程标志）
+     → 轮询等待 CDP 就绪（最多 15 秒）
     ↓
 persistent_browser() (asynccontextmanager)
     → browser.contexts[0] 获取已有 context（或 new_context）
@@ -144,6 +147,7 @@ python-dotenv     # 读写 .env 中的 NS_COOKIES
 - [x] Cloudflare 自动绕过（CDP 常驻模式）
 - [x] Chrome 窗口踢至屏幕外 + 最小化（防弹窗，2026-03-08）
 - [x] CDP context 复用已有 page（减少 new_page 触发窗口弹出，2026-03-08）
+- [x] Windows 兼容（Chrome 探测 / STARTUPINFO 最小化 / 平台 UA，2026-03-09）
 
 ### 已知约束
 - CF Turnstile 首次/过期需人工验证一次，无法完全自动化
@@ -161,8 +165,14 @@ python-dotenv     # 读写 .env 中的 NS_COOKIES
 ## 七、修改时注意事项
 
 1. **不要改 browser.py 的 GUI 模式为 headless**，除非同时解决 CF Turnstile 问题（见 §三）
-2. **ns.py 是脚本文件**，通过 `uv run ns.py` 执行，不是通过 `uv run ns`（pyproject.toml 的 scripts 入口需安装后才生效）
-3. **输出目录约定**：`output/hot/`、`output/posts/`、`output/users/`、`output/search/`
-4. **格式约定**：hot 支持 json/csv/table；post/user 支持 json/md/csv；**search 支持 json/md/table**，其中 json/md 格式会写入文件（支持 `--output` 自定义目录）
-5. **数据模型统一在 `models.py`**：包括 `HotPost`、`PostDetail`、`Comment`、`UserComment`、`UserProfile`、`SearchResult`、`SearchResponse`
-6. **exporter 公共工具**：`make_output_dir()` 和 `make_timestamp()` 定义在 `nodeseek/exporters/utils.py`，三个 exporter 统一 import，不要各自重复定义
+2. **跨平台注意**：browser.py 中 Chrome 路径探测和 subprocess 启动参数已按 `platform.system()` 区分，修改时需同时考虑
+    自动探测 Chrome / Chromium 可执行文件路径（Windows + macOS + Linux）。
+    按 platform.system() 区分候选路径，返回第一个存在的路径。
+    Windows: PROGRAMFILES / PROGRAMFILES(X86) / LOCALAPPDATA 下的 Google\Chrome\Application\chrome.exe
+    macOS: /Applications/Google Chrome.app/...
+    Linux: /usr/bin/google-chrome 等
+3. **ns.py 是脚本文件**，通过 `uv run ns.py` 执行，不是通过 `uv run ns`（pyproject.toml 的 scripts 入口需安装后才生效）
+4. **输出目录约定**：`output/hot/`、`output/posts/`、`output/users/`、`output/search/`
+5. **格式约定**：hot 支持 json/csv/table；post/user 支持 json/md/csv；**search 支持 json/md/table**，其中 json/md 格式会写入文件（支持 `--output` 自定义目录）
+6. **数据模型统一在 `models.py`**：包括 `HotPost`、`PostDetail`、`Comment`、`UserComment`、`UserProfile`、`SearchResult`、`SearchResponse`
+7. **exporter 公共工具**：`make_output_dir()` 和 `make_timestamp()` 定义在 `nodeseek/exporters/utils.py`，三个 exporter 统一 import，不要各自重复定义

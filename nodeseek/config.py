@@ -27,12 +27,18 @@ HOT_API_URLS = {
     "weekly": "https://api.bimg.eu.org/weekly.json",
 }
 
-# Playwright 浏览器 User-Agent
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
-)
+# Playwright 浏览器 User-Agent（按实际平台选取以保持指纹一致）
+def _make_user_agent() -> str:
+    import platform
+    _ua_tpl = "Mozilla/5.0 ({os_part}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    os_parts = {
+        "Windows": "Windows NT 10.0; Win64; x64",
+        "Darwin":  "Macintosh; Intel Mac OS X 10_15_7",
+        "Linux":   "X11; Linux x86_64",
+    }
+    return _ua_tpl.format(os_part=os_parts.get(platform.system(), os_parts["Linux"]))
+
+USER_AGENT = _make_user_agent()
 
 # Playwright 等待 Cloudflare 握手的时间（秒）
 CF_WAIT_SECONDS = 4

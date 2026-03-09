@@ -1,6 +1,8 @@
 # NodeSeek 数据工具
 
 > 轻量级 NodeSeek 论坛数据聚合工具 — 热榜 / 帖子详情 / 用户评论
+>
+> **支持 Windows / macOS / Linux**
 
 ## 快速开始
 
@@ -122,8 +124,10 @@ nodeseek-scraper/
 ## 依赖
 
 - **Python ≥ 3.11**
-- **uv** — 依赖管理 (`brew install uv`)
-- **Google Chrome** — 自动启动用于 Cloudflare 绕过
+- **uv** — 依赖管理
+  - macOS / Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`（或 `brew install uv`）
+  - Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+- **Google Chrome** — 自动启动用于 Cloudflare 绕过（支持自动探测 Windows / macOS / Linux 安装路径）
 - **httpx** — 热榜 / 搜索 HTTP 客户端
 - **playwright + chromium** — fallback 模式（Chrome 不可用时）
 - **lxml + cssselect** — HTML 解析
@@ -160,11 +164,12 @@ NodeSeek 内部 API `/api/content/list-comments` 存在**服务端翻页上限**
 本项目使用 uv 管理依赖，虚拟环境位于 `.venv/`。
 
 ```bash
-# ✅ 正确用法
+# ✅ 正确用法（所有平台通用）
 uv run ns.py hot
 
 # ❌ 不要手动激活 .venv
-# source .venv/bin/activate  ← 不需要
+# macOS/Linux: source .venv/bin/activate  ← 不需要
+# Windows:     .venv\Scripts\activate     ← 也不需要
 ```
 
 如遇到 `VIRTUAL_ENV` 相关警告，重开终端即可解决。

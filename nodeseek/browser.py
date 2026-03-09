@@ -43,22 +43,41 @@ CDP_PORT = 9222
 
 def _find_chrome_binary() -> Optional[str]:
     """
-    自动探测 Chrome / Chromium 可执行文件路径（macOS + Linux）。
+    自动探测 Chrome / Chromium 可执行文件路径（Windows + macOS + Linux）。
     按优先级逐一检查候选路径，返回第一个存在的路径。
     """
-    candidates = [
+    import os
+    import platform
+
+    candidates: list[str] = []
+    system = platform.system()
+
+    if system == "Windows":
+        # Windows — 常见安装路径（通过环境变量定位）
+        for env_var in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+            base = os.environ.get(env_var, "")
+            if base:
+                candidates.append(os.path.join(base, r"Google\Chrome\Application\chrome.exe"))
+        # 用户级 AppData 安装
+        appdata = os.environ.get("LOCALAPPDATA", "")
+        if appdata:
+            candidates.append(os.path.join(appdata, r"Chromium\Application\chrome.exe"))
+    elif system == "Darwin":
         # macOS — 系统级安装
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        candidates.append("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
         # macOS — 用户级安装
-        str(Path.home() / "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        candidates.append(str(Path.home() / "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"))
         # macOS — Chromium
-        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        candidates.append("/Applications/Chromium.app/Contents/MacOS/Chromium")
+    else:
         # Linux
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/chromium",
-    ]
+        candidates.extend([
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
+        ])
+
     for path in candidates:
         if Path(path).exists():
             return path
@@ -116,24 +135,39 @@ async def _launch_and_connect(pw) -> Optional[object]:
         "[dim]  首次运行需完成一次 Cloudflare 验证（点击帖子页的 Turnstile），后续自动通过。[/dim]"
     )
 
-    subprocess.Popen(
-        [
-            chrome_bin,
-            f"--remote-debugging-port={CDP_PORT}",
-            f"--user-data-dir={profile_dir}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--disable-extensions",
-            "--disable-default-apps",
-            "--disable-sync",
-            # 视觉隐藏（非 headless，CF 指纹不受影响）
-            "--window-position=-10000,-10000",
-            "--window-size=1,1",
-            "--window-state=minimized",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    import platform
+
+    chrome_args = [
+        chrome_bin,
+        f"--remote-debugging-port={CDP_PORT}",
+        f"--user-data-dir={profile_dir}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-extensions",
+        "--disable-default-apps",
+        "--disable-sync",
+        # 视觉隐藏（非 headless，CF 指纹不受影响）
+        "--window-position=-10000,-10000",
+        "--window-size=1,1",
+    ]
+
+    popen_kwargs: dict = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+
+    if platform.system() == "Windows":
+        # Windows: --window-state=minimized 不生效，改用 STARTUPINFO
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 7  # SW_SHOWMINIMIZED
+        popen_kwargs["startupinfo"] = si
+        # 让 Chrome 进程独立于父进程，避免脚本退出时 Chrome 跟着退出
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        chrome_args.append("--window-state=minimized")
+
+    subprocess.Popen(chrome_args, **popen_kwargs)
 
     # 轮询等待 CDP 就绪（最多 15 秒）
     for _ in range(15):
