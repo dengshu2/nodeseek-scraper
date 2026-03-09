@@ -22,12 +22,46 @@ browser.py — 浏览器 context 管理 (Camoufox 反指纹引擎)
       await page.goto(url)
 """
 from contextlib import asynccontextmanager
+import platform
+import sys
 
 from camoufox.async_api import AsyncCamoufox
 from rich.console import Console
 
 console = Console()
 
+
+def _check_camoufox_version_compat() -> None:
+    """
+    ⚠️ macOS arm64 专用：检测 Camoufox 浏览器二进制版本，过新则输出警告。
+
+    问题记录：
+      Camoufox 146.0.1-beta.25 在 macOS arm64 上存在 bug：
+      访问 NodeSeek 帖子页时 Firefox 内核抛出 NS_ERROR_FAILURE
+      (nsIStreamListener.onDataAvailable)，导致 page.content() 返回乱码。
+
+    锁定版本：135.0.1-beta.24
+    修复跟踪：https://github.com/daijro/camoufox/issues
+    """
+    if sys.platform != 'darwin' or platform.machine().lower() != 'arm64':
+        return  # 只影响 macOS arm64
+
+    try:
+        from camoufox.pkgman import installed_verstr
+        ver = installed_verstr()  # e.g. '146.0.1-beta.25'
+        # 解析 beta 版本号
+        if '-beta.' in ver:
+            beta_num = int(ver.split('-beta.')[-1])
+            if beta_num >= 25:
+                console.print(
+                    "\n[bold red]⚠️  Camoufox 版本警告！[/bold red]"
+                    f"\n  已安装版本 [yellow]{ver}[/yellow] 在 macOS arm64 上存在已知 Bug，"
+                    "\n  可能导致帖子页返回乱码、抓取失败。"
+                    "\n  [dim]请降级到 135.0.1-beta.24： bash scripts/fix-camoufox-macos.sh[/dim]"
+                    "\n  [dim]上游进展：https://github.com/daijro/camoufox/issues[/dim]\n"
+                )
+    except Exception:
+        pass  # 检测失败不阻塑正常流程
 
 @asynccontextmanager
 async def persistent_browser(headless: bool = True, verbose: bool = False):
@@ -51,6 +85,8 @@ async def persistent_browser(headless: bool = True, verbose: bool = False):
     """
     if verbose:
         console.print("[dim]→ 启动 Camoufox 浏览器...[/dim]")
+
+    _check_camoufox_version_compat()  # macOS arm64 版本兼容性检测
 
     async with AsyncCamoufox(
         headless=headless,

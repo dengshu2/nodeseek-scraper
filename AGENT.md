@@ -143,6 +143,23 @@ rich           # 终端 UI（表格、进度条、颜色）
 - Camoufox 定制 Firefox 二进制约 960MB 磁盘占用
 - 每次命令启动独立浏览器实例（约 3-4 秒启动开销）
 
+### ⚠️ macOS arm64 Camoufox 版本锁定（2026-03-09）
+
+**当前锁定版本：`135.0.1-beta.24`（macOS arm64 专用）**
+
+- **问题**：Camoufox `146.0.1-beta.25`（最新版）在 macOS arm64 上存在严重 bug：
+  访问 NodeSeek 帖子页时，Firefox 内核抛出 `NS_ERROR_FAILURE (nsIStreamListener.onDataAvailable)`，
+  导致 `page.content()` 返回乱码二进制，页面 DOM 无法正常解析。
+- **影响范围**：仅 macOS arm64（Apple Silicon）。Windows x86_64 / Linux 不受影响。
+- **上游 issue**：https://github.com/daijro/camoufox/issues（CloverLabs 团队正在修复）
+- **已验证可用版本**：`135.0.1-beta.24`
+- **⛔ 禁止运行** `uv run camoufox fetch`，否则会升级到 beta.25 导致功能失效
+- **升级前请确认**：在 GitHub Releases 确认新版已修复该 bug 后，再手动运行恢复脚本：
+  ```bash
+  # 恢复脚本（macOS arm64）
+  scripts/fix-camoufox-macos.sh
+  ```
+
 ### 潜在优化方向（未实现）
 - MCP Server wrapper（让 AI 直接调用抓取能力）
 - 定时任务 / 增量更新
@@ -159,3 +176,4 @@ rich           # 终端 UI（表格、进度条、颜色）
 5. **格式约定**：hot 支持 json/csv/table；post/user 支持 json/md/csv；**search 支持 json/md/table**，其中 json/md 格式会写入文件（支持 `--output` 自定义目录）
 6. **数据模型统一在 `models.py`**：包括 `HotPost`、`PostDetail`、`Comment`、`UserBasicInfo`、`UserComment`、`UserProfile`、`SearchResult`、`SearchResponse`
 7. **exporter 公共工具**：`make_output_dir()` 和 `make_timestamp()` 定义在 `nodeseek/exporters/utils.py`，三个 exporter 统一 import，不要各自重复定义
+8. **⚠️ macOS arm64 不可升级 Camoufox 浏览器二进制**：见 §六「版本锁定」说明，`camoufox fetch` 命令会破坏 macOS 上的抓取功能
