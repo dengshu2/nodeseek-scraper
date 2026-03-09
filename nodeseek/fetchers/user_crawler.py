@@ -150,8 +150,9 @@ async def crawl_users(
                 # 保存断点
                 set_meta(conn, "crawl_last_uid", str(batch_end))
 
-                # 如果连续 200 个 UID 都是空的，大概率已到上限
-                if consecutive_empty >= 200:
+                # 如果连续 2000 个 UID 都是空的，大概率已到上限
+                # （早期 UID 段有大量空洞，需要较高阈值避免误停）
+                if consecutive_empty >= 2000:
                     console.print(
                         f"\n[yellow]⚠ 连续 {consecutive_empty} 个空 UID，"
                         f"已到达用户上限，自动停止[/yellow]"
