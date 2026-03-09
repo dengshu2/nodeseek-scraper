@@ -31,14 +31,14 @@ nodeseek-scraper/
 ├── nodeseek/                    # Python 包（核心库）
 │   ├── __init__.py              # __version__ = "0.1.0"
 │   ├── config.py                # 路径常量、BASE_URL、CF_WAIT_SECONDS
-│   ├── browser.py               # ⭐ 浏览器/CDP 管理（见 §三）
+│   ├── browser.py               # ⭐ Camoufox 浏览器管理（见 §三）
 │   ├── models.py                # PostDetail, Comment, UserProfile 数据类
 │   │
 │   ├── fetchers/
 │   │   ├── hot.py               # httpx → 第三方 API（无 CF）
-│   │   ├── post.py              # Playwright CDP → 帖子页 HTML 解析
-│   │   ├── user.py              # Playwright CDP → /api/content/list-comments
-│   │   ├── profile.py           # Playwright CDP → /api/account/getInfo/{uid}
+│   │   ├── post.py              # Camoufox headless → 帖子页 HTML 解析
+│   │   ├── user.py              # Camoufox headless → /api/content/list-comments
+│   │   ├── profile.py           # Camoufox headless → /api/account/getInfo/{uid}
 │   │   └── search.py            # httpx → nodeseek.dengshu.ovh（自建聚合 API）
 │   │
 │   ├── parsers/
@@ -50,62 +50,49 @@ nodeseek-scraper/
 │       ├── markdown_exporter.py
 │       └── table_printer.py     # Rich 终端表格
 │
-├── .chrome-scraper-profile/     # CDP 专用 Chrome Profile（主路径）
-├── .browser-profile/            # Playwright fallback profile（备用）
 └── output/                      # 抓取结果（hot/posts/users/search）
 ```
 
 ---
 
-## 三、核心机制：Cloudflare 绕过
+## 三、核心机制：Cloudflare 绕过（Camoufox）
 
-### 3.1 为什么必须用 GUI Chrome（⚠️ 关键约束）
+### 3.1 方案概述
 
 NodeSeek 对 `/post-*` 和用户 API 路径启用了**交互式 Cloudflare Turnstile**（Managed Challenge）。
 
+本项目使用 **Camoufox**（定制 Firefox 引擎）自动绕过 CF，**完全 headless，零人工干预**：
+
 | 模式 | CF 自动通过？ | 备注 |
 |------|-------------|------|
-| `headless=new` | ❌ 不能 | 指纹真实，但 Turnstile 需要人工点击 |
-| GUI Chrome（有效 cf_clearance）| ✅ 自动通过 | Profile 中保存了 cf_clearance |
-| GUI Chrome（首次/cf 过期）| 需人工点一次 | 之后自动常驻复用 |
+| Playwright headless Chrome | ❌ | 指纹被 CF 检测 |
+| GUI Chrome + CDP（旧方案） | ⚠️ 需首次人工 | 依赖 cf_clearance + 常驻进程 |
+| **Camoufox headless（当前方案）** | **✅ 自动** | **C++ 级反指纹，无需人工** |
 
-**因此：**
-- 必须使用真实 GUI Chrome（非 headless）
-- 首次使用需人工完成一次 Turnstile 验证
-- cf_clearance 有效期约 1-24 小时，过期后需重新验证一次
+### 3.2 Camoufox 技术原理
 
-### 3.2 browser.py 工作流
+- 基于定制 Firefox 引擎，在 C++ 层面拦截指纹检测
+- 修改 navigator、screen、WebGL、fonts 等属性，避免 JS 注入被反爬系统发现
+- 内置类人行为模拟（`humanize=True`）：鼠标移动、打字延迟
+- 完全兼容 Playwright API（page.goto / page.content / page.evaluate 等）
+
+### 3.3 browser.py 工作流
 
 ```
-运行 ns.py post/user
-    ↓
-_try_connect_cdp()  → 检测 9222 端口是否有 Chrome 已启动
-    ↓ 有：直接 CDP 接管（零延迟）
-    ↓ 无：
-_auto_launch_cdp_chrome()
-    → subprocess.Popen 启动 GUI Chrome
-     → --window-position=-10000,-10000 --window-size=1,1  ← 窗口踢至屏幕外（2026-03 优化）
-     → Windows: subprocess.STARTUPINFO(SW_SHOWMINIMIZED) + CREATE_NEW_PROCESS_GROUP
-     → macOS/Linux: --window-state=minimized
-     → 任务栏/Dock 里会有图标（正常现象，GUI 进程标志）
-     → 轮询等待 CDP 就绪（最多 15 秒）
+运行 ns.py post/user/profile
     ↓
 persistent_browser() (asynccontextmanager)
-    → browser.contexts[0] 获取已有 context（或 new_context）
-    → yield ctx
-    → browser.close()（仅断开 CDP，不终止 Chrome 进程）
+    → AsyncCamoufox(headless=True, humanize=True)
+    → 启动定制 Firefox 实例（约 3-4 秒）
+    → yield BrowserContext（Playwright 兼容）
+    → 命令结束后自动关闭浏览器，无常驻进程
 ```
 
-### 3.3 重要：Chrome 进程常驻
+### 3.4 注意事项
 
-**工具结束后 Chrome 进程不会退出**，下次调用直接 CDP 复用，启动延迟只在第一次发生。
-这是**故意设计**，不是 bug。`browser.close()` 只断开 Playwright 连接，不 kill 进程。
-
-### 3.4 Cookie 同步命令
-
-```bash
-uv run ns.py sync-cookies   # 从已登录的真实 Chrome 读取 cookies 写入 .env
-```
+- **无需安装 Chrome**：Camoufox 自带定制 Firefox，首次使用自动下载（~960MB）
+- **无常驻进程**：每次命令启动独立浏览器实例，用完即释放
+- **无需 cookie 管理**：CF 绕过在引擎层面实现，不依赖 cf_clearance
 
 ---
 
@@ -114,9 +101,9 @@ uv run ns.py sync-cookies   # 从已登录的真实 Chrome 读取 cookies 写入
 | 命令 | 数据源 | CF 保护 | 技术 |
 |------|--------|---------|------|
 | `hot` | api.bimg.eu.org | ❌ 无 | httpx |
-| `post` | nodeseek.com 页面 | ✅ GUI CDP | Playwright + lxml |
-| `user` | /api/content/list-comments | ✅ GUI CDP | Playwright + JSON |
-| `profile` | /api/account/getInfo/{uid} | ✅ GUI CDP | Playwright + JSON |
+| `post` | nodeseek.com 页面 | ✅ Camoufox 自动绕过 | Camoufox + lxml |
+| `user` | /api/content/list-comments | ✅ Camoufox 自动绕过 | Camoufox + JSON |
+| `profile` | /api/account/getInfo/{uid} | ✅ Camoufox 自动绕过 | Camoufox + JSON |
 | `search` | nodeseek.dengshu.ovh | ❌ 无 | httpx |
 
 **search API 限制**：`nodeseek.dengshu.ovh` 是站长（dengshu）部署的第三方聚合服务，数据来自 NodeSeek RSS，存在延迟，不是实时爬取。
@@ -128,12 +115,11 @@ uv run ns.py sync-cookies   # 从已登录的真实 Chrome 读取 cookies 写入
 ## 五、依赖说明
 
 ```toml
-httpx      # hot/search 的 HTTP 客户端
-playwright # 浏览器自动化（CDP + fallback 两种模式）
+httpx          # hot/search 的 HTTP 客户端
+camoufox       # 反指纹 Firefox 引擎（自动绕过 CF）
+playwright     # 浏览器自动化 API（由 camoufox 封装使用）
 lxml + cssselect  # 帖子 HTML 解析
-rich       # 终端 UI（表格、进度条、颜色）
-browser-cookie3   # sync-cookies 命令读取真实 Chrome cookies
-python-dotenv     # 读写 .env 中的 NS_COOKIES
+rich           # 终端 UI（表格、进度条、颜色）
 ```
 
 运行环境：`uv run ns.py ...`（无需手动激活 venv）
@@ -146,34 +132,28 @@ python-dotenv     # 读写 .env 中的 NS_COOKIES
 - [x] 热榜/日榜/周榜（多格式输出：json/csv/table）
 - [x] 帖子详情+评论（自动翻页，多格式：json/md）
 - [x] 用户评论（多格式：json/csv/md）
+- [x] 用户基本资料查询（profile 命令）
 - [x] 关键词搜索（多格式，支持 --output 保存文件）
-- [x] Cloudflare 自动绕过（CDP 常驻模式）
-- [x] Chrome 窗口踢至屏幕外 + 最小化（防弹窗，2026-03-08）
-- [x] CDP context 复用已有 page（减少 new_page 触发窗口弹出，2026-03-08）
-- [x] Windows 兼容（Chrome 探测 / STARTUPINFO 最小化 / 平台 UA，2026-03-09）
+- [x] Cloudflare 自动绕过（Camoufox headless 模式，零人工干预，2026-03-09）
+- [x] Windows / macOS / Linux 全平台支持
 
 ### 已知约束
-- CF Turnstile 首次/过期需人工验证一次，无法完全自动化
 - search 依赖第三方 API，数据非实时
 - user 评论上限 510 条
-- Chrome 常驻进程占用约 150-200MB 内存
+- Camoufox 定制 Firefox 二进制约 960MB 磁盘占用
+- 每次命令启动独立浏览器实例（约 3-4 秒启动开销）
 
 ### 潜在优化方向（未实现）
-- **Step 2（CF 优化）**：检测 Profile 中 cf_clearance 有效期，未过期时改用 `headless=new` 彻底无弹窗
 - MCP Server wrapper（让 AI 直接调用抓取能力）
 - 定时任务 / 增量更新
+- 浏览器实例复用（减少批量场景的启动开销）
 
 ---
 
 ## 七、修改时注意事项
 
-1. **不要改 browser.py 的 GUI 模式为 headless**，除非同时解决 CF Turnstile 问题（见 §三）
-2. **跨平台注意**：browser.py 中 Chrome 路径探测和 subprocess 启动参数已按 `platform.system()` 区分，修改时需同时考虑
-    自动探测 Chrome / Chromium 可执行文件路径（Windows + macOS + Linux）。
-    按 platform.system() 区分候选路径，返回第一个存在的路径。
-    Windows: PROGRAMFILES / PROGRAMFILES(X86) / LOCALAPPDATA 下的 Google\Chrome\Application\chrome.exe
-    macOS: /Applications/Google Chrome.app/...
-    Linux: /usr/bin/google-chrome 等
+1. **browser.py 使用 Camoufox headless 模式**，已自动绕过 CF Turnstile，无需手动验证（见 §三）
+2. **Camoufox 返回 Playwright 兼容的 BrowserContext**，所有 fetcher 使用标准 Playwright API（page.goto / page.content / page.evaluate）
 3. **ns.py 是脚本文件**，通过 `uv run ns.py` 执行，不是通过 `uv run ns`（pyproject.toml 的 scripts 入口需安装后才生效）
 4. **输出目录约定**：`output/hot/`、`output/posts/`、`output/users/`、`output/search/`
 5. **格式约定**：hot 支持 json/csv/table；post/user 支持 json/md/csv；**search 支持 json/md/table**，其中 json/md 格式会写入文件（支持 `--output` 自定义目录）

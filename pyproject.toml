@@ -9,6 +9,7 @@ dependencies = [
     "lxml>=5.0",
     "cssselect>=1.2",
     "rich>=13.0",
+    "camoufox>=0.4.11",
 ]
 
 [project.scripts]

@@ -38,8 +38,11 @@ Thumbs.db
 .env.*
 cookies.txt
 
+# 数据库文件（本地运行产生，不入库）
+*.db
+
 # pytest
 .pytest_cache/
 
-# CDP 专用 Chrome Profile（含 cf_clearance、session cookie 等敏感信息，不应提交）
+# 旧方案遗留：Chrome CDP Profile（已迁移到 Camoufox，保留规则防误提交）
 .chrome-scraper-profile/
