@@ -14,7 +14,9 @@
 uv run ns.py hot         # 热榜（直接 API，无需认证）
 uv run ns.py post 637248 # 帖子详情+评论（需绕过 Cloudflare）
 uv run ns.py user shaw-deng  # 用户评论（需绕过 Cloudflare）
+uv run ns.py user tmall wjgppx yeling  # ⚡ 批量用户评论（共享浏览器，只启动一次）
 uv run ns.py profile shaw-deng  # 用户基本资料（需绕过 Cloudflare）
+uv run ns.py profile tmall wjgppx yeling  # ⚡ 批量用户资料（共享浏览器，只启动一次）
 uv run ns.py search claude   # 关键词搜索（第三方聚合 API）
 ```
 

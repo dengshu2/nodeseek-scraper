@@ -10,6 +10,7 @@ ns.py — NodeSeek 数据工具 CLI 入口
   uv run ns.py hot --format csv         # CSV 输出
 
   uv run ns.py user shaw-deng           # 用户全部评论
+  uv run ns.py user tmall wjgppx yeling # 批量查询（共享浏览器，只冷启动一次）
   uv run ns.py user --uid 36700         # 按 UID 直接查
   uv run ns.py user shaw-deng --pages 3 # 限制3页
   uv run ns.py user shaw-deng --format md
@@ -17,6 +18,9 @@ ns.py — NodeSeek 数据工具 CLI 入口
   uv run ns.py post 637248              # 帖子详情
   uv run ns.py post 637248 637250       # 多个帖子
   uv run ns.py post 637248 --no-comments
+
+  uv run ns.py profile shaw-deng        # 用户资料
+  uv run ns.py profile tmall wjgppx yeling  # 批量查询（共享浏览器，只冷启动一次）
 
   uv run ns.py search claude            # 关键词搜索
   uv run ns.py search vps --category trade --limit 30
@@ -72,8 +76,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── user ─────────────────────────────────────────────────
     user = subparsers.add_parser("user", help="获取用户评论")
-    user.add_argument("username", nargs="?", help="用户名")
-    user.add_argument("--uid", type=int, help="直接指定 UID (跳过用户名解析)")
+    user.add_argument("username", nargs="*", help="用户名（支持多个，批量时共享浏览器）")
+    user.add_argument("--uid", type=int, help="直接指定 UID (跳过用户名解析)，仅单用户时有效")
     user.add_argument(
         "--pages", type=int, default=0,
         help="限制拉取页数，0 = 全部 (默认: 全部)",
@@ -102,8 +106,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── profile ──────────────────────────────────────────────
     prof = subparsers.add_parser("profile", help="获取用户基本资料")
-    prof.add_argument("username", nargs="?", help="用户名")
-    prof.add_argument("--uid", type=int, help="直接指定 UID")
+    prof.add_argument("username", nargs="*", help="用户名（支持多个，批量时共享浏览器）")
+    prof.add_argument("--uid", type=int, help="直接指定 UID，仅单用户时有效")
     prof.add_argument(
         "--format", "-f",
         choices=["table", "json"],
@@ -247,15 +251,54 @@ async def cmd_hot(args: argparse.Namespace) -> None:
 
 
 async def cmd_user(args: argparse.Namespace) -> None:
-    from nodeseek.fetchers.user import fetch_user_comments
     from nodeseek.exporters.json_exporter import export_user
 
-    if not args.username and not args.uid:
+    usernames = args.username or []
+
+    # 批量模式：多用户名，共享浏览器实例（含 profile 附带查询）
+    if len(usernames) > 1:
+        from nodeseek.fetchers.user import fetch_users_batch
+        console.print(
+            f"[bold cyan]批量模式：{len(usernames)} 个用户，共享单一 Camoufox 实例[/bold cyan]"
+        )
+        profiles = await fetch_users_batch(
+            usernames=usernames,
+            max_pages=args.pages,
+            include_profile=not args.no_profile,
+            verbose=args.verbose,
+        )
+        for profile in profiles:
+            info = profile.info
+            info_str = (
+                f" | Lv{info.rank} 鸡腿{info.coin} 粉丝{info.fans}"
+                if info else ""
+            )
+            console.print(
+                f"[green]✓ 用户 [bold]{profile.username}[/bold] "
+                f"(UID={profile.uid}) 共 {profile.total_comments} 条评论{info_str}[/green]"
+            )
+            if args.fmt == "json":
+                path = export_user(profile, output_dir=args.output)
+                console.print(f"[dim]  → {path}[/dim]")
+            elif args.fmt == "md":
+                from nodeseek.exporters.markdown_exporter import export_user_md
+                path = export_user_md(profile, output_dir=args.output)
+                console.print(f"[dim]  → {path}[/dim]")
+            elif args.fmt == "csv":
+                from nodeseek.exporters.csv_exporter import export_user_csv
+                path = export_user_csv(profile, output_dir=args.output)
+                console.print(f"[dim]  → {path}[/dim]")
+        return
+
+    # 单用户模式（小兼容 --uid 参数）
+    username = usernames[0] if usernames else None
+    if not username and not args.uid:
         console.print("[red]错误: 需要指定用户名或 --uid[/red]")
         sys.exit(1)
 
+    from nodeseek.fetchers.user import fetch_user_comments
     profile = await fetch_user_comments(
-        username=args.username,
+        username=username,
         uid=args.uid,
         max_pages=args.pages,
         verbose=args.verbose,
@@ -367,54 +410,58 @@ async def cmd_search(args: argparse.Namespace) -> None:
 
 
 async def cmd_profile(args: argparse.Namespace) -> None:
-    from nodeseek.fetchers.profile import fetch_user_profile
+    usernames = args.username or []
 
-    if not args.username and not args.uid:
+    # 批量模式：多用户名，共享浏览器实例
+    if len(usernames) > 1:
+        from nodeseek.fetchers.profile import fetch_user_profiles_batch
+        console.print(
+            f"[bold cyan]批量模式：{len(usernames)} 个用户，共享单一 Camoufox 实例[/bold cyan]"
+        )
+        results = await fetch_user_profiles_batch(usernames=usernames, verbose=args.verbose)
+        for info in results:
+            _print_profile_card(info)
+        return
+
+    # 单用户模式（小兼容 --uid 参数）
+    username = usernames[0] if usernames else None
+    if not username and not args.uid:
         console.print("[red]错误: 需要指定用户名或 --uid[/red]")
         sys.exit(1)
 
-    # 优先从本地 DB 查 UID，避免 CF 重定向
-    uid = args.uid
-    if uid is None and args.username:
-        try:
-            from nodeseek.db import get_connection, get_uid_by_username
-            conn = get_connection()
-            uid = get_uid_by_username(conn, args.username)
-            conn.close()
-            if uid:
-                console.print(f"[dim]  DB 命中: {args.username} → UID={uid}[/dim]")
-        except Exception:
-            pass  # DB 不存在时 fallback 到 CF
-
+    from nodeseek.fetchers.profile import fetch_user_profile
     info = await fetch_user_profile(
-        username=args.username if uid is None else None,
-        uid=uid,
+        username=username,
+        uid=args.uid,
         verbose=args.verbose,
     )
 
     if args.fmt == "table":
-        # Rich Panel 卡片展示
-        from rich.panel import Panel
-        from rich.table import Table
-
-        table = Table(show_header=False, box=None, padding=(0, 2))
-        table.add_column("key", style="bold")
-        table.add_column("val", style="cyan")
-        table.add_column("key2", style="bold")
-        table.add_column("val2", style="cyan")
-
-        table.add_row("等级", f"Lv {info.rank}", "主题帖", str(info.n_post))
-        table.add_row("鸡腿", str(info.coin), "评论数", str(info.n_comment))
-        table.add_row("星辰", str(info.stardust), "粉丝", str(info.fans))
-        table.add_row("注册", info.created_at_str or info.created_at[:10], "关注", str(info.follows))
-
-        panel = Panel(table, title=f"{info.username} (UID={info.uid})", border_style="green")
-        console.print(panel)
-
+        _print_profile_card(info)
     elif args.fmt == "json":
         from nodeseek.exporters.json_exporter import export_profile
         path = export_profile(info, output_dir=args.output)
         console.print(f"[dim]→ {path}[/dim]")
+
+
+def _print_profile_card(info) -> None:
+    """Rich Panel 卡片展示用户资料"""
+    from rich.panel import Panel
+    from rich.table import Table
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("key", style="bold")
+    table.add_column("val", style="cyan")
+    table.add_column("key2", style="bold")
+    table.add_column("val2", style="cyan")
+
+    table.add_row("等级", f"Lv {info.rank}", "主题帖", str(info.n_post))
+    table.add_row("鸡腿", str(info.coin), "评论数", str(info.n_comment))
+    table.add_row("星辰", str(info.stardust), "粉丝", str(info.fans))
+    table.add_row("注册", info.created_at_str or info.created_at[:10], "关注", str(info.follows))
+
+    panel = Panel(table, title=f"{info.username} (UID={info.uid})", border_style="green")
+    console.print(panel)
 
 
 async def cmd_sync_users(args: argparse.Namespace) -> None:

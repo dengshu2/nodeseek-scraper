@@ -38,7 +38,10 @@ async def fetch_user_comments(
     verbose: bool = False,
 ) -> UserProfile:
     """
-    抓取用户全部评论并返回 UserProfile。
+    抓取单个用户全部评论并返回 UserProfile（独立浏览器实例）。
+
+    如需批量查询多个用户，请使用 fetch_users_batch()，
+    可复用同一浏览器实例，节省大量冷启动时间。
 
     Args:
         username:  用户名（与 uid 二选一）
@@ -48,30 +51,107 @@ async def fetch_user_comments(
     """
     async with persistent_browser(headless=True) as ctx:
         page = await ctx.new_page()
+        await _warmup_session(page, verbose)
+        return await _fetch_user_on_page(
+            page, username=username, uid=uid, max_pages=max_pages, verbose=verbose
+        )
 
-        # ── Step 1: 会话预热（Camoufox 自动绕过 CF）───────────
-        if verbose:
-            console.print("[dim]→ 访问主页 (会话预热)...[/dim]")
 
-        await page.goto(config.BASE_URL, timeout=30_000)
-        await asyncio.sleep(config.CF_WAIT_SECONDS)
+async def fetch_users_batch(
+    usernames: list[str],
+    max_pages: int = 0,
+    include_profile: bool = True,
+    verbose: bool = False,
+) -> list[UserProfile]:
+    """
+    批量抓取多个用户的评论，所有请求共享同一 Camoufox 实例。
 
-        if verbose:
-            console.print(f"[dim]  当前 URL: {page.url}[/dim]")
+    与逐个调用 fetch_user_comments() 相比，节省了 (N-1) 次浏览器冷启动
+    （每次约 3~4 秒），N 个用户只需启动一次浏览器。
 
-        # ── Step 2: 解析 username → UID ───────────────────────
+    include_profile=True 时，在同一浏览器会话内附带查询用户基本资料（等级/鸡腿等），
+    不需额外启动第二个浏览器实例。
+
+    Args:
+        usernames:       用户名列表
+        max_pages:       单个用户最多拉取页数，0 = 全部
+        include_profile: 是否附带获取用户基本资料（默认 True）
+        verbose:         是否输出调试日志
+
+    Returns:
+        UserProfile 列表（顺序与输入一致，失败的跳过）
+    """
+    results: list[UserProfile] = []
+
+    async with persistent_browser(headless=True) as ctx:
+        page = await ctx.new_page()
+        await _warmup_session(page, verbose)
+
+        for i, username in enumerate(usernames, 1):
+            console.print(
+                f"[cyan]({i}/{len(usernames)}) 抓取用户 [bold]{username}[/bold] 的评论...[/cyan]"
+            )
+            try:
+                profile = await _fetch_user_on_page(
+                    page, username=username, max_pages=max_pages, verbose=verbose
+                )
+                # 在同一浏览器会话内附带查询用户基本资料（UID 已知，直接 API 调用）
+                if include_profile:
+                    try:
+                        from nodeseek.fetchers.profile import _fetch_profile_on_page
+                        info = await _fetch_profile_on_page(
+                            page, uid=profile.uid, verbose=verbose
+                        )
+                        profile.info = info
+                    except Exception as e:
+                        console.print(f"[yellow]  ⚠️ {username} 基本资料获取失败: {e}[/yellow]")
+                results.append(profile)
+            except Exception as e:
+                console.print(f"[yellow]  ⚠️ {username} 抓取失败，跳过: {e}[/yellow]")
+
+    return results
+
+
+# ── 内部实现─────────────────────────────────────────────────────────────────
+
+async def _warmup_session(page, verbose: bool) -> None:
+    """会话预热：访问主页让 Camoufox 自动绕过 CF"""
+    if verbose:
+        console.print("[dim]→ 访问主页 (会话预热)...[/dim]")
+    await page.goto(config.BASE_URL, timeout=30_000)
+    await asyncio.sleep(config.CF_WAIT_SECONDS)
+
+
+async def _fetch_user_on_page(
+    page,
+    username: Optional[str] = None,
+    uid: Optional[int] = None,
+    max_pages: int = 0,
+    verbose: bool = False,
+) -> UserProfile:
+    """在已有 page 上执行单个用户评论抓取（不负责浏览器生命周期）"""
+    # 解析 username → UID：先查本地 DB，命中则跳过网络重定向
+    if uid is None:
+        try:
+            from nodeseek.db import get_connection, get_uid_by_username
+            conn = get_connection()
+            uid = get_uid_by_username(conn, username)
+            conn.close()
+            if uid:
+                console.print(f"[dim]  DB 命中: {username} → UID={uid}[/dim]")
+        except Exception:
+            pass  # DB 不存在时 fallback 到网络
         if uid is None:
             console.print(f"[cyan]→ 解析用户名 [bold]{username}[/bold] → UID...[/cyan]")
             uid = await _resolve_uid(page, username, verbose)
             console.print(f"[green]  ✓ UID = {uid}[/green]")
-        else:
-            console.print(f"[cyan]→ 使用 UID = {uid}[/cyan]")
-            # 即使直接指定 UID，仍需跳转一次获取用户名（如果 username 未提供）
-            if not username:
-                username = await _resolve_username(page, uid, verbose)
+    else:
+        console.print(f"[cyan]→ 使用 UID = {uid}[/cyan]")
+        if not username:
+            username = await _resolve_username(page, uid, verbose)
 
-        # ── Step 3: 分页拉取评论 ───────────────────────────────
-        comments = await _fetch_all_comments(page, uid, max_pages, verbose)
+    # 分页拉取评论
+    comments = await _fetch_all_comments(page, uid, max_pages, verbose)
 
     return UserProfile(
         uid=uid,
@@ -79,6 +159,7 @@ async def fetch_user_comments(
         total_comments=len(comments),
         comments=comments,
     )
+
 
 
 async def _resolve_uid(page, username: str, verbose: bool) -> int:
