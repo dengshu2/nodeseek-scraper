@@ -173,6 +173,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="输出目录 (默认: output/search/)，仅 json/md 格式有效",
     )
 
+    # ── sync-users ────────────────────────────────────────────
+    sync = subparsers.add_parser("sync-users", help="全量枚举 UID 爬取用户资料到 SQLite")
+    sync.add_argument(
+        "--start", type=int, default=1,
+        help="起始 UID (默认: 1)",
+    )
+    sync.add_argument(
+        "--max", type=int, default=55000,
+        dest="max_uid",
+        help="最大 UID (默认: 55000，会自动检测上限停止)",
+    )
+    sync.add_argument(
+        "--batch", type=int, default=20,
+        dest="batch_size",
+        help="每批并发数 (默认: 20)",
+    )
+    sync.add_argument(
+        "--resume", action="store_true",
+        help="从上次断点继续",
+    )
+    sync.add_argument(
+        "--delay", type=float, default=0.3,
+        help="每批间隔秒数 (默认: 0.3)",
+    )
+
+    # ── lookup ───────────────────────────────────────────────
+    lk = subparsers.add_parser("lookup", help="从本地 DB 查询用户")
+    lk.add_argument("username", nargs="?", help="用户名")
+    lk.add_argument("--uid", type=int, help="按 UID 查")
+    lk.add_argument(
+        "--search", "-s", default=None, dest="keyword",
+        help="模糊搜索用户名",
+    )
+    lk.add_argument(
+        "--limit", "-n", type=int, default=20,
+        help="搜索返回条数 (默认: 20)",
+    )
+    lk.add_argument(
+        "--stats", action="store_true",
+        help="显示数据库统计信息",
+    )
+
     return parser
 
 
@@ -332,9 +374,22 @@ async def cmd_profile(args: argparse.Namespace) -> None:
         console.print("[red]错误: 需要指定用户名或 --uid[/red]")
         sys.exit(1)
 
+    # 优先从本地 DB 查 UID，避免 CF 重定向
+    uid = args.uid
+    if uid is None and args.username:
+        try:
+            from nodeseek.db import get_connection, get_uid_by_username
+            conn = get_connection()
+            uid = get_uid_by_username(conn, args.username)
+            conn.close()
+            if uid:
+                console.print(f"[dim]  DB 命中: {args.username} → UID={uid}[/dim]")
+        except Exception:
+            pass  # DB 不存在时 fallback 到 CF
+
     info = await fetch_user_profile(
-        username=args.username,
-        uid=args.uid,
+        username=args.username if uid is None else None,
+        uid=uid,
         verbose=args.verbose,
     )
 
@@ -363,16 +418,108 @@ async def cmd_profile(args: argparse.Namespace) -> None:
         console.print(f"[dim]→ {path}[/dim]")
 
 
+async def cmd_sync_users(args: argparse.Namespace) -> None:
+    from nodeseek.fetchers.user_crawler import crawl_users
+
+    await crawl_users(
+        start_uid=args.start,
+        max_uid=args.max_uid,
+        batch_size=args.batch_size,
+        resume=args.resume,
+        delay=args.delay,
+    )
+
+
+async def cmd_lookup(args: argparse.Namespace) -> None:
+    from nodeseek.db import (
+        get_connection, get_user_by_uid, get_user_by_username,
+        search_users, get_user_count, get_meta,
+    )
+
+    conn = get_connection()
+
+    if args.stats:
+        count = get_user_count(conn)
+        last_uid = get_meta(conn, "crawl_last_uid") or "未同步"
+        console.print(
+            f"[bold]数据库统计[/bold]\n"
+            f"  用户总数: [cyan]{count:,}[/cyan]\n"
+            f"  最后同步 UID: [cyan]{last_uid}[/cyan]"
+        )
+        conn.close()
+        return
+
+    if args.keyword:
+        results = search_users(conn, args.keyword, limit=args.limit)
+        if not results:
+            console.print("[yellow]未找到匹配用户[/yellow]")
+        else:
+            from rich.table import Table
+            table = Table(show_header=True, header_style="bold magenta", box=None)
+            table.add_column("UID",   style="cyan",  width=8)
+            table.add_column("用户名", style="green", ratio=2)
+            table.add_column("等级",  width=6)
+            table.add_column("帖子",  width=6)
+            table.add_column("评论",  width=8)
+            table.add_column("粉丝",  width=6)
+            table.add_column("注册时间", style="dim", width=12)
+            for u in results:
+                table.add_row(
+                    str(u["uid"]), u["username"], f"Lv{u['rank']}",
+                    str(u["n_post"]), str(u["n_comment"]),
+                    str(u["fans"]), (u.get("created_at_str") or u.get("created_at", ""))[:10],
+                )
+            console.print(table)
+            console.print(f"[dim]共 {len(results)} 条结果[/dim]")
+        conn.close()
+        return
+
+    user = None
+    if args.uid:
+        user = get_user_by_uid(conn, args.uid)
+    elif args.username:
+        user = get_user_by_username(conn, args.username)
+    else:
+        console.print("[red]错误: 需要指定用户名、--uid 或 --search[/red]")
+        conn.close()
+        sys.exit(1)
+
+    if not user:
+        console.print("[yellow]用户不在本地数据库中，请先运行 sync-users[/yellow]")
+        conn.close()
+        return
+
+    from rich.panel import Panel
+    from rich.table import Table
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("key", style="bold")
+    table.add_column("val", style="cyan")
+    table.add_column("key2", style="bold")
+    table.add_column("val2", style="cyan")
+
+    table.add_row("等级", f"Lv {user['rank']}", "主题帖", str(user["n_post"]))
+    table.add_row("鸡腿", str(user["coin"]), "评论数", str(user["n_comment"]))
+    table.add_row("星辰", str(user["stardust"]), "粉丝", str(user["fans"]))
+    table.add_row("注册", user.get("created_at_str") or user.get("created_at", "")[:10], "关注", str(user["follows"]))
+
+    panel = Panel(table, title=f"{user['username']} (UID={user['uid']})", border_style="green")
+    console.print(panel)
+    conn.close()
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
     dispatch = {
-        "hot":     cmd_hot,
-        "user":    cmd_user,
-        "post":    cmd_post,
-        "search":  cmd_search,
-        "profile": cmd_profile,
+        "hot":        cmd_hot,
+        "user":       cmd_user,
+        "post":       cmd_post,
+        "search":     cmd_search,
+        "profile":    cmd_profile,
+        "sync-users": cmd_sync_users,
+        "lookup":     cmd_lookup,
     }
 
     try:

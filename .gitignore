@@ -46,3 +46,6 @@ cookies.txt
 
 # 旧方案遗留：Chrome CDP Profile（已迁移到 Camoufox，保留规则防误提交）
 .chrome-scraper-profile/
+
+# SQLite 数据库（用户全量数据，本地生成）
+nodeseek.db
