@@ -55,6 +55,22 @@ class PostDetail:
 
 
 @dataclass
+class UserBasicInfo:
+    """用户基本资料（来自 /api/account/getInfo/{uid}）"""
+    uid: int
+    username: str
+    rank: int               # 用户等级 (Lv)
+    coin: int               # 鸡腿（站内货币）
+    stardust: int           # 星辰
+    n_post: int             # 主题帖数
+    n_comment: int          # 评论数
+    follows: int            # 关注数
+    fans: int               # 粉丝数
+    created_at: str         # 注册时间 ISO 8601
+    created_at_str: str     # 注册时间（中文格式）
+
+
+@dataclass
 class UserComment:
     """用户单条评论记录"""
     post_id: int
@@ -71,6 +87,7 @@ class UserProfile:
     username: str
     total_comments: int
     comments: list[UserComment] = field(default_factory=list)
+    info: Optional[UserBasicInfo] = None  # 用户基本资料（可选附带）
 
 
 @dataclass

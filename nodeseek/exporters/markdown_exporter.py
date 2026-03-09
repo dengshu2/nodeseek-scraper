@@ -23,6 +23,28 @@ def export_user_md(profile: UserProfile, output_dir: Optional[str] = None) -> Pa
         f"- **总评论数**: {profile.total_comments}",
         f"- **导出时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"",
+    ]
+
+    # 附带用户基本资料（如果有）
+    if profile.info:
+        i = profile.info
+        lines += [
+            f"## 用户资料",
+            f"",
+            f"| 字段 | 值 |",
+            f"|------|-----|",
+            f"| 等级 | Lv {i.rank} |",
+            f"| 鸡腿 | {i.coin} |",
+            f"| 星辰 | {i.stardust} |",
+            f"| 主题帖 | {i.n_post} |",
+            f"| 评论数 | {i.n_comment} |",
+            f"| 粉丝 | {i.fans} |",
+            f"| 关注 | {i.follows} |",
+            f"| 注册时间 | {i.created_at_str or i.created_at[:10]} |",
+            f"",
+        ]
+
+    lines += [
         f"---",
         f"",
     ]

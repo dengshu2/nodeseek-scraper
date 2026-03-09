@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from nodeseek import config
-from nodeseek.models import HotPost, PostDetail, UserProfile
+from nodeseek.models import HotPost, PostDetail, UserProfile, UserBasicInfo
 from nodeseek.exporters.utils import make_output_dir, make_timestamp
 
 
@@ -41,6 +41,10 @@ def export_user(profile: UserProfile, output_dir: Optional[str] = None) -> Path:
         "comments": [asdict(c) for c in profile.comments],
     }
 
+    # 附带用户基本资料（如果有）
+    if profile.info:
+        payload["profile"] = asdict(profile.info)
+
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
@@ -53,6 +57,20 @@ def export_post(detail: PostDetail, output_dir: Optional[str] = None) -> Path:
     payload = {
         "generated_at": datetime.now().isoformat(),
         **asdict(detail),
+    }
+
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def export_profile(info: UserBasicInfo, output_dir: Optional[str] = None) -> Path:
+    """导出用户基本资料为 JSON，返回文件路径"""
+    d = make_output_dir(config.USER_OUTPUT_DIR, output_dir)
+    path = d / f"{info.username}_profile.json"
+
+    payload = {
+        "generated_at": datetime.now().isoformat(),
+        **asdict(info),
     }
 
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

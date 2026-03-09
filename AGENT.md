@@ -14,6 +14,7 @@
 uv run ns.py hot         # 热榜（直接 API，无需认证）
 uv run ns.py post 637248 # 帖子详情+评论（需绕过 Cloudflare）
 uv run ns.py user shaw-deng  # 用户评论（需绕过 Cloudflare）
+uv run ns.py profile shaw-deng  # 用户基本资料（需绕过 Cloudflare）
 uv run ns.py search claude   # 关键词搜索（第三方聚合 API）
 ```
 
@@ -37,6 +38,7 @@ nodeseek-scraper/
 │   │   ├── hot.py               # httpx → 第三方 API（无 CF）
 │   │   ├── post.py              # Playwright CDP → 帖子页 HTML 解析
 │   │   ├── user.py              # Playwright CDP → /api/content/list-comments
+│   │   ├── profile.py           # Playwright CDP → /api/account/getInfo/{uid}
 │   │   └── search.py            # httpx → nodeseek.dengshu.ovh（自建聚合 API）
 │   │
 │   ├── parsers/
@@ -114,6 +116,7 @@ uv run ns.py sync-cookies   # 从已登录的真实 Chrome 读取 cookies 写入
 | `hot` | api.bimg.eu.org | ❌ 无 | httpx |
 | `post` | nodeseek.com 页面 | ✅ GUI CDP | Playwright + lxml |
 | `user` | /api/content/list-comments | ✅ GUI CDP | Playwright + JSON |
+| `profile` | /api/account/getInfo/{uid} | ✅ GUI CDP | Playwright + JSON |
 | `search` | nodeseek.dengshu.ovh | ❌ 无 | httpx |
 
 **search API 限制**：`nodeseek.dengshu.ovh` 是站长（dengshu）部署的第三方聚合服务，数据来自 NodeSeek RSS，存在延迟，不是实时爬取。
@@ -174,5 +177,5 @@ python-dotenv     # 读写 .env 中的 NS_COOKIES
 3. **ns.py 是脚本文件**，通过 `uv run ns.py` 执行，不是通过 `uv run ns`（pyproject.toml 的 scripts 入口需安装后才生效）
 4. **输出目录约定**：`output/hot/`、`output/posts/`、`output/users/`、`output/search/`
 5. **格式约定**：hot 支持 json/csv/table；post/user 支持 json/md/csv；**search 支持 json/md/table**，其中 json/md 格式会写入文件（支持 `--output` 自定义目录）
-6. **数据模型统一在 `models.py`**：包括 `HotPost`、`PostDetail`、`Comment`、`UserComment`、`UserProfile`、`SearchResult`、`SearchResponse`
+6. **数据模型统一在 `models.py`**：包括 `HotPost`、`PostDetail`、`Comment`、`UserBasicInfo`、`UserComment`、`UserProfile`、`SearchResult`、`SearchResponse`
 7. **exporter 公共工具**：`make_output_dir()` 和 `make_timestamp()` 定义在 `nodeseek/exporters/utils.py`，三个 exporter 统一 import，不要各自重复定义

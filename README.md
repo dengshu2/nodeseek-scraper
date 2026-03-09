@@ -25,6 +25,12 @@ uv run ns.py user --uid 36700         # 按 UID 直接查
 uv run ns.py user shaw-deng --pages 3 # 限制3页（每页15条）
 uv run ns.py user shaw-deng --format md   # Markdown 格式（适合 AI 分析）
 uv run ns.py user shaw-deng --format csv  # CSV 格式
+uv run ns.py user shaw-deng --no-profile  # 仅拉取评论，不获取用户资料
+
+# 用户基本资料（自动处理 Cloudflare）
+uv run ns.py profile shaw-deng        # 终端资料卡片展示
+uv run ns.py profile --uid 36700      # 按 UID 查
+uv run ns.py profile shaw-deng -f json  # JSON 输出 → output/users/shaw-deng_profile.json
 
 # 帖子详情（自动处理 Cloudflare）
 uv run ns.py post 637248              # 单个帖子 → output/posts/post_637248.json
@@ -80,6 +86,7 @@ uv run ns.py sync-cookies   # 从已登录的 Chrome 读取并写入 .env
 | 热榜/日榜/周榜 | 第三方 API (api.bimg.eu.org) | ❌ 无 | httpx |
 | 帖子详情+评论 | nodeseek.com 页面渲染 | ✅ 自动处理 | Chrome CDP |
 | 用户评论 | nodeseek.com 内部 API | ✅ 自动处理 | Chrome CDP |
+| 用户资料 | /api/account/getInfo/{uid} | ✅ 自动处理 | Chrome CDP |
 | 关键词搜索 | 自建聚合 API (nodeseek.dengshu.ovh) | ❌ 无 | httpx |
 
 热榜 API 更新频率：实时热榜每分钟、日榜每5分钟、周榜每60分钟。

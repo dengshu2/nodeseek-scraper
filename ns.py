@@ -95,6 +95,27 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Netscape 格式 cookie 文件 (可选)",
     )
+    user.add_argument(
+        "--no-profile", action="store_true",
+        help="不获取用户基本资料（仅拉取评论）",
+    )
+
+    # ── profile ──────────────────────────────────────────────
+    prof = subparsers.add_parser("profile", help="获取用户基本资料")
+    prof.add_argument("username", nargs="?", help="用户名")
+    prof.add_argument("--uid", type=int, help="直接指定 UID")
+    prof.add_argument(
+        "--format", "-f",
+        choices=["table", "json"],
+        default="table",
+        dest="fmt",
+        help="输出格式 (默认: table — Rich 卡片)",
+    )
+    prof.add_argument(
+        "--output", "-o",
+        default=None,
+        help="输出目录 (默认: output/users/)，仅 json 格式有效",
+    )
 
     # ── post ─────────────────────────────────────────────────
     post = subparsers.add_parser("post", help="获取帖子详情+评论")
@@ -198,6 +219,15 @@ async def cmd_user(args: argparse.Namespace) -> None:
         verbose=args.verbose,
     )
 
+    # 附带获取用户基本资料（除非 --no-profile）
+    if not args.no_profile:
+        try:
+            from nodeseek.fetchers.profile import fetch_user_profile
+            info = await fetch_user_profile(uid=profile.uid, verbose=args.verbose)
+            profile.info = info
+        except Exception as e:
+            console.print(f"[yellow]⚠️ 获取用户资料失败: {e}[/yellow]")
+
     console.print(
         f"[green]✓ 用户 [bold]{profile.username}[/bold] "
         f"(UID={profile.uid}) 共 {profile.total_comments} 条评论[/green]"
@@ -297,15 +327,54 @@ async def cmd_search(args: argparse.Namespace) -> None:
         console.print(f"[dim]  → {path}[/dim]")
 
 
+async def cmd_profile(args: argparse.Namespace) -> None:
+    from nodeseek.fetchers.profile import fetch_user_profile
+
+    if not args.username and not args.uid:
+        console.print("[red]错误: 需要指定用户名或 --uid[/red]")
+        sys.exit(1)
+
+    info = await fetch_user_profile(
+        username=args.username,
+        uid=args.uid,
+        verbose=args.verbose,
+    )
+
+    if args.fmt == "table":
+        # Rich Panel 卡片展示
+        from rich.panel import Panel
+        from rich.table import Table
+
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        table.add_column("key", style="bold")
+        table.add_column("val", style="cyan")
+        table.add_column("key2", style="bold")
+        table.add_column("val2", style="cyan")
+
+        table.add_row("等级", f"Lv {info.rank}", "主题帖", str(info.n_post))
+        table.add_row("鸡腿", str(info.coin), "评论数", str(info.n_comment))
+        table.add_row("星辰", str(info.stardust), "粉丝", str(info.fans))
+        table.add_row("注册", info.created_at_str or info.created_at[:10], "关注", str(info.follows))
+
+        panel = Panel(table, title=f"{info.username} (UID={info.uid})", border_style="green")
+        console.print(panel)
+
+    elif args.fmt == "json":
+        from nodeseek.exporters.json_exporter import export_profile
+        path = export_profile(info, output_dir=args.output)
+        console.print(f"[dim]→ {path}[/dim]")
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
     dispatch = {
-        "hot":    cmd_hot,
-        "user":   cmd_user,
-        "post":   cmd_post,
-        "search": cmd_search,
+        "hot":     cmd_hot,
+        "user":    cmd_user,
+        "post":    cmd_post,
+        "search":  cmd_search,
+        "profile": cmd_profile,
     }
 
     try:
