@@ -138,6 +138,7 @@ rich           # 终端 UI（表格、进度条、颜色）
 - [x] 关键词搜索（多格式，支持 --output 保存文件）
 - [x] Cloudflare 自动绕过（Camoufox headless 模式，零人工干预，2026-03-09）
 - [x] Windows / macOS / Linux 全平台支持
+- [x] 进程级文件锁（`/tmp/ns_camoufox.lock`），防止多个 ns.py 并行启动时浏览器冲突（2026-03-11）
 
 ### 已知约束
 - search 依赖第三方 API，数据非实时
@@ -179,3 +180,4 @@ rich           # 终端 UI（表格、进度条、颜色）
 6. **数据模型统一在 `models.py`**：包括 `HotPost`、`PostDetail`、`Comment`、`UserBasicInfo`、`UserComment`、`UserProfile`、`SearchResult`、`SearchResponse`
 7. **exporter 公共工具**：`make_output_dir()` 和 `make_timestamp()` 定义在 `nodeseek/exporters/utils.py`，三个 exporter 统一 import，不要各自重复定义
 8. **⚠️ macOS arm64 不可升级 Camoufox 浏览器二进制**：见 §六「版本锁定」说明，`camoufox fetch` 命令会破坏 macOS 上的抓取功能
+9. **⚠️ 不要并行运行多个 post/user/profile 命令**：Camoufox 不支持多实例并行（macOS 进程间冲突）。browser.py 已加入文件锁（`/tmp/ns_camoufox.lock`）自动排队，但 AI 调用时仍应尽量将帖子 ID 合并到一次命令中（如 `uv run ns.py post 1 2 3 4 5 6`）以节省总耗时，而非拆成多组并行。
