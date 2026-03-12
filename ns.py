@@ -419,8 +419,14 @@ async def cmd_profile(args: argparse.Namespace) -> None:
             f"[bold cyan]批量模式：{len(usernames)} 个用户，共享单一 Camoufox 实例[/bold cyan]"
         )
         results = await fetch_user_profiles_batch(usernames=usernames, verbose=args.verbose)
-        for info in results:
-            _print_profile_card(info)
+        if args.fmt == "json":
+            from nodeseek.exporters.json_exporter import export_profile
+            for info in results:
+                path = export_profile(info, output_dir=args.output)
+                console.print(f"[dim]→ {path}[/dim]")
+        else:
+            for info in results:
+                _print_profile_card(info)
         return
 
     # 单用户模式（小兼容 --uid 参数）

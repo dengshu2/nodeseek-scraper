@@ -9,10 +9,11 @@ import json
 from pathlib import Path
 from typing import Optional
 
+from nodeseek import config
 from nodeseek.models import SearchResponse
 from nodeseek.exporters.utils import make_output_dir, make_timestamp
 
-_SEARCH_OUTPUT_DIR = "output/search"
+_SEARCH_OUTPUT_DIR = config.OUTPUT_DIR / "search"
 
 
 def export_search_json(

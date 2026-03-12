@@ -139,7 +139,8 @@ async def crawl_users(
                 "爬取用户", total=total, saved=0
             )
 
-            for batch_start in range(start_uid, max_uid + 1, batch_size):
+            batch_start = start_uid
+            while batch_start <= max_uid:
                 batch_end = min(batch_start + batch_size - 1, max_uid)
                 uids = list(range(batch_start, batch_end + 1))
 
@@ -170,7 +171,7 @@ async def crawl_users(
                         break
 
                     await asyncio.sleep(2)
-                    continue
+                    continue  # 重试同一批次，不推进 batch_start
 
                 # ── 解析结果 ──
                 batch_saved = 0
@@ -214,9 +215,7 @@ async def crawl_users(
                     await asyncio.sleep(config.CF_WAIT_SECONDS)
                     if await _wait_for_cf_clearance(page):
                         console.print("[green]  ✓ CF 恢复，重试此批次[/green]")
-                        # 不更新断点，下次循环会重试（通过调整 batch_start）
-                        # 注意：range 不支持回退，我们用 continue + 不保存断点
-                        continue
+                        continue  # 重试同一批次，不推进 batch_start
                     else:
                         console.print(
                             "[bold red]✗ CF 无法恢复，保存进度并退出[/bold red]"
@@ -241,6 +240,8 @@ async def crawl_users(
 
                 if delay > 0:
                     await asyncio.sleep(delay)
+
+                batch_start += batch_size
 
     set_meta(conn, "crawl_max_uid", str(max_uid))
 

@@ -59,7 +59,7 @@ class TestUserCommand:
     def test_username(self, parser):
         args = parser.parse_args(["user", "shaw-deng"])
         assert args.command == "user"
-        assert args.username == "shaw-deng"
+        assert args.username == ["shaw-deng"]
         assert args.uid is None
         assert args.pages == 0
         assert args.fmt == "json"
@@ -67,7 +67,7 @@ class TestUserCommand:
     def test_uid(self, parser):
         args = parser.parse_args(["user", "--uid", "36700"])
         assert args.uid == 36700
-        assert args.username is None
+        assert args.username is None or args.username == []
 
     def test_pages(self, parser):
         args = parser.parse_args(["user", "test", "--pages", "3"])
@@ -94,7 +94,7 @@ class TestProfileCommand:
     def test_username(self, parser):
         args = parser.parse_args(["profile", "shaw-deng"])
         assert args.command == "profile"
-        assert args.username == "shaw-deng"
+        assert args.username == ["shaw-deng"]
         assert args.uid is None
         assert args.fmt == "table"
 

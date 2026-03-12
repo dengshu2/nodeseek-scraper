@@ -261,9 +261,18 @@ async def _fetch_all_comments(
                 "([uid, page]) => fetch("
                 "`/api/content/list-comments?uid=${uid}&page=${page}`,"
                 " {headers: {'Accept': 'application/json'}})"
-                ".then(r => r.json())",
+                ".then(r => r.ok && (r.headers.get('content-type') || '').includes('application/json')"
+                "  ? r.json()"
+                "  : r.text().then(t => ({_blocked: true, _status: r.status, _body: t.slice(0, 200)})))",
                 [uid, page_num],
             )
+
+            if result.get("_blocked"):
+                console.print(
+                    f"[yellow]  ⚠️ 第 {page_num} 页被 CF 拦截 "
+                    f"(HTTP {result.get('_status')})，停止[/yellow]"
+                )
+                break
 
             if not result.get("success"):
                 console.print(
