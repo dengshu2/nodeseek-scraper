@@ -111,10 +111,11 @@ async def crawl_users(
     async with persistent_browser(headless=True) as ctx:
         page = await ctx.new_page()
 
-        # 会话预热（Camoufox 自动绕过 CF）
+        # 会话预热（Camoufox 自动绕过 CF，智能等待）
         console.print("[dim]→ 会话预热...[/dim]")
         await page.goto(config.BASE_URL, timeout=30_000)
-        await asyncio.sleep(config.CF_WAIT_SECONDS)
+        from nodeseek.fetchers.post import _wait_for_cf_ready
+        await _wait_for_cf_ready(page)
 
         title = await page.title()
         if "challenge" in title.lower() or "请稍候" in title:
@@ -158,7 +159,7 @@ async def crawl_users(
                     console.print("[dim]  → 尝试恢复: 重新访问主页...[/dim]")
                     try:
                         await page.goto(config.BASE_URL, timeout=30_000)
-                        await asyncio.sleep(config.CF_WAIT_SECONDS)
+                        await _wait_for_cf_ready(page)
                         if not await _wait_for_cf_clearance(page):
                             console.print(
                                 "[bold red]✗ CF 恢复失败，保存进度并退出[/bold red]"
