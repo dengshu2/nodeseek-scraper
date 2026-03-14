@@ -13,10 +13,10 @@
 ```
 uv run ns.py hot         # 热榜（直接 API，无需认证）
 uv run ns.py post 637248 # 帖子详情+评论（需绕过 Cloudflare）
+uv run ns.py post 637248 637250 279630  # ⚡ 多帖子并发（浏览器内 JS fetch，不渲染页面）
 uv run ns.py user shaw-deng  # 用户评论（需绕过 Cloudflare）
 uv run ns.py user tmall wjgppx yeling  # ⚡ 批量用户评论（共享浏览器，只启动一次）
 uv run ns.py profile shaw-deng  # 用户基本资料（需绕过 Cloudflare）
-uv run ns.py profile tmall wjgppx yeling  # ⚡ 批量用户资料（共享浏览器，只启动一次）
 uv run ns.py search claude   # 关键词搜索（第三方聚合 API）
 ```
 
@@ -38,9 +38,10 @@ nodeseek-scraper/
 │   │
 │   ├── fetchers/
 │   │   ├── hot.py               # httpx → 第三方 API（无 CF）
-│   │   ├── post.py              # Camoufox headless → 帖子页 HTML 解析
-│   │   ├── user.py              # Camoufox headless → /api/content/list-comments
-│   │   ├── profile.py           # Camoufox headless → /api/account/getInfo/{uid}
+│   │   ├── post.py              # ⚡ 浏览器内 JS fetch → HTML 解析（Promise.allSettled 并发）
+│   │   ├── user.py              # 浏览器内 JS fetch → /api/content/list-comments
+│   │   ├── profile.py           # 浏览器内 JS fetch → /api/account/getInfo/{uid}
+│   │   ├── user_crawler.py      # 浏览器内 JS fetch → 全量 UID 枚举爬取
 │   │   └── search.py            # httpx → nodeseek.dengshu.ovh（自建聚合 API）
 │   │
 │   ├── parsers/
@@ -87,14 +88,23 @@ persistent_browser() (asynccontextmanager)
     → AsyncCamoufox(headless=True, humanize=True)
     → 启动定制 Firefox 实例（约 3-4 秒）
     → yield BrowserContext（Playwright 兼容）
-    → 命令结束后自动关闭浏览器，无常驻进程
+    → 命令结束后自动关闭浏览器
 ```
 
-### 3.4 注意事项
+### 3.4 浏览器内 JS fetch 模式（⭐ 核心优化）
+
+所有需绕过 CF 的 fetcher 都使用 `page.evaluate(fetch(...))` 在浏览器 JS 沙箱内发 HTTP 请求，**不做 DOM 渲染**，只拿 HTML/JSON 文本，速度和 httpx 直接请求相当（~300ms/请求 vs 旧版 page.goto 的 ~3s/请求）。
+
+| 旧版（page.goto） | 新版（JS fetch） |
+|---|---|
+| 浏览器完整渲染页面 ~3s/页 | fetch() 只拿文本 ~300ms/页 |
+| 串行翻页 | Promise.allSettled 并发批量 fetch |
+
+### 3.5 注意事项
 
 - **无需安装 Chrome**：Camoufox 自带定制 Firefox，首次使用自动下载（~960MB）
 - **无常驻进程**：每次命令启动独立浏览器实例，用完即释放
-- **无需 cookie 管理**：CF 绕过在引擎层面实现，不依赖 cf_clearance
+- **无需 cookie 管理**：CF 绕过在引擎层面实现，不依赖外部 cf_clearance
 
 ---
 
@@ -103,9 +113,9 @@ persistent_browser() (asynccontextmanager)
 | 命令 | 数据源 | CF 保护 | 技术 |
 |------|--------|---------|------|
 | `hot` | api.bimg.eu.org | ❌ 无 | httpx |
-| `post` | nodeseek.com 页面 | ✅ Camoufox 自动绕过 | Camoufox + lxml |
-| `user` | /api/content/list-comments | ✅ Camoufox 自动绕过 | Camoufox + JSON |
-| `profile` | /api/account/getInfo/{uid} | ✅ Camoufox 自动绕过 | Camoufox + JSON |
+| `post` | nodeseek.com 帖子页 HTML | ✅ Camoufox 自动绕过 | JS fetch + lxml 解析（不渲染页面） |
+| `user` | /api/content/list-comments | ✅ Camoufox 自动绕过 | JS fetch + JSON |
+| `profile` | /api/account/getInfo/{uid} | ✅ Camoufox 自动绕过 | JS fetch + JSON |
 | `search` | nodeseek.dengshu.ovh | ❌ 无 | httpx |
 
 **search API 限制**：`nodeseek.dengshu.ovh` 是站长（dengshu）部署的第三方聚合服务，数据来自 NodeSeek RSS，存在延迟，不是实时爬取。
@@ -133,12 +143,14 @@ rich           # 终端 UI（表格、进度条、颜色）
 ### 已实现
 - [x] 热榜/日榜/周榜（多格式输出：json/csv/table）
 - [x] 帖子详情+评论（自动翻页，多格式：json/md）
+- [x] ⚡ post 命令速度优化：JS fetch 替代 page.goto，Promise.allSettled 并发，速度提升 10~30 倍（2026-03-14）
 - [x] 用户评论（多格式：json/csv/md）
 - [x] 用户基本资料查询（profile 命令）
 - [x] 关键词搜索（多格式，支持 --output 保存文件）
-- [x] Cloudflare 自动绕过（Camoufox headless 模式，零人工干预，2026-03-09）
+- [x] Cloudflare 自动绕过（Camoufox headless 模式，零人工干预）
+- [x] 智能 CF 等待（轮询 title 替代固定 sleep，快的时候 0.5s 即通过）
 - [x] Windows / macOS / Linux 全平台支持
-- [x] 进程级文件锁（`/tmp/ns_camoufox.lock`），防止多个 ns.py 并行启动时浏览器冲突（2026-03-11）
+- [x] 进程级文件锁，防止多实例 Camoufox 冲突
 
 ### 已知约束
 - search 依赖第三方 API，数据非实时
@@ -164,16 +176,16 @@ rich           # 终端 UI（表格、进度条、颜色）
   ```
 
 ### 潜在优化方向（未实现）
+- 提取 cookies + httpx/curl_cffi 直接请求（绕过浏览器启动开销，但 CF TLS 指纹风险高）
 - MCP Server wrapper（让 AI 直接调用抓取能力）
 - 定时任务 / 增量更新
-- 浏览器实例复用（减少批量场景的启动开销）
 
 ---
 
 ## 七、修改时注意事项
 
-1. **browser.py 使用 Camoufox headless 模式**，已自动绕过 CF Turnstile，无需手动验证（见 §三）
-2. **Camoufox 返回 Playwright 兼容的 BrowserContext**，所有 fetcher 使用标准 Playwright API（page.goto / page.content / page.evaluate）
+1. **browser.py 使用 Camoufox headless 模式**，已自动绕过 CF Turnstile（见 §三）
+2. **所有 fetcher 使用浏览器内 JS fetch 模式**，不做 DOM 渲染（`page.evaluate(fetch(...))`），而不是 `page.goto()` + `page.content()`
 3. **ns.py 是脚本文件**，通过 `uv run ns.py` 执行，不是通过 `uv run ns`（pyproject.toml 的 scripts 入口需安装后才生效）
 4. **输出目录约定**：`output/hot/`、`output/posts/`、`output/users/`、`output/search/`
 5. **格式约定**：hot 支持 json/csv/table；post/user 支持 json/md/csv；**search 支持 json/md/table**，其中 json/md 格式会写入文件（支持 `--output` 自定义目录）
