@@ -115,11 +115,12 @@ async def fetch_users_batch(
 # ── 内部实现─────────────────────────────────────────────────────────────────
 
 async def _warmup_session(page, verbose: bool) -> None:
-    """会话预热：访问主页让 Camoufox 自动绕过 CF"""
+    """会话预热：访问主页让 Camoufox 自动绕过 CF（智能等待，非固定 sleep）"""
+    from nodeseek.fetchers.post import _wait_for_cf_ready
     if verbose:
         console.print("[dim]→ 访问主页 (会话预热)...[/dim]")
     await page.goto(config.BASE_URL, timeout=30_000)
-    await asyncio.sleep(config.CF_WAIT_SECONDS)
+    await _wait_for_cf_ready(page, verbose)
 
 
 async def _fetch_user_on_page(
